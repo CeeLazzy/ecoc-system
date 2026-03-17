@@ -447,6 +447,25 @@ document.getElementById("discrepancyDiv").style.display="none";
 // ---------------- ROUTES ----------------
 
 app.get("/",(req,res)=>res.send(renderForm()));
+app.get("/view-pdfs", (req, res) => {
+  const pdfDir = path.join(__dirname, "eCOC IC Labs");
+
+  fs.readdir(pdfDir, (err, files) => {
+    if (err) return res.send("Error reading PDF folder.");
+
+    // Filter only .pdf files
+    const pdfFiles = files.filter(f => f.endsWith(".pdf"));
+
+    // Create a simple HTML page with links
+    let html = "<h2>All eCOC PDFs</h2><ul>";
+    pdfFiles.forEach(file => {
+      html += `<li><a href="/pdfs/${file}" target="_blank">${file}</a></li>`;
+    });
+    html += "</ul>";
+
+    res.send(html);
+  });
+});
 
 app.post("/add", async (req,res)=>{
 
