@@ -6,6 +6,7 @@ const path = require("path");
 const bwipjs = require("bwip-js");
 
 const app = express();
+app.use('/pdfs', express.static(path.join(__dirname, 'eCOC IC Labs')));
 const PORT = process.env.PORT || 3000;
 
 app.use(express.urlencoded({ extended: true }));
