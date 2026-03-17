@@ -6,7 +6,7 @@ const path = require("path");
 const bwipjs = require("bwip-js");
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(__dirname));
@@ -626,4 +626,4 @@ res.redirect("/");
 
 });
 
-const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log("Server running on port " + PORT));
