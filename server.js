@@ -626,4 +626,7 @@ res.redirect("/");
 
 });
 
-app.listen(PORT, () => console.log("Server running on port " + PORT));
+if (!global.__portDeclared) {
+    app.listen(PORT, () => console.log("Server running on port " + PORT));
+    global.__portDeclared = true;
+}
