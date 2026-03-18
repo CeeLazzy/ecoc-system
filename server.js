@@ -444,9 +444,138 @@ document.getElementById("discrepancyDiv").style.display="none";
 `;
 }
 
+function renderEditForm(data, role){
+
+return `
+<html>
+<head>
+<title>Edit eCOC</title>
+
+<style>
+body{
+font-family:Arial;
+padding:30px;
+background:#f4f6f9;
+}
+
+form{
+max-width:700px;
+margin:auto;
+background:white;
+padding:30px;
+border-radius:10px;
+box-shadow:0 4px 10px rgba(0,0,0,0.1);
+}
+
+label{
+font-weight:bold;
+margin-top:15px;
+display:block;
+}
+
+input,select{
+width:100%;
+padding:8px;
+margin-top:5px;
+border-radius:5px;
+border:1px solid #ccc;
+}
+
+button{
+margin-top:20px;
+padding:10px;
+width:100%;
+background:#2c3e50;
+color:white;
+border:none;
+border-radius:5px;
+cursor:pointer;
+}
+</style>
+
+</head>
+
+<body>
+
+<h2 style="text-align:center;">Edit COC (Role: ${role})</h2>
+
+<form method="POST" action="/update/${data.id}?role=${role}">
+
+<!-- SITE FIELDS -->
+
+<label>Protocol Name</label>
+<input name="protocol_name" value="${data.protocol_name || ''}" ${role !== 'site' ? 'readonly' : ''}>
+
+<label>Site Name</label>
+<input name="site_name" value="${data.site_name || ''}" ${role !== 'site' ? 'readonly' : ''}>
+
+<label>Shipping Date</label>
+<input type="date" name="shipping_date" value="${data.shipping_date || ''}" ${role !== 'site' ? 'readonly' : ''}>
+
+<label>Requisition Number</label>
+<input name="requisition_number" value="${data.requisition_number || ''}" ${role !== 'site' ? 'readonly' : ''}>
+
+<label>PID</label>
+<input name="pid" value="${data.pid || ''}" ${role !== 'site' ? 'readonly' : ''}>
+
+<label>Sample Type</label>
+<input name="sample_type" value="${data.sample_type || ''}" ${role !== 'site' ? 'readonly' : ''}>
+
+<!-- DRIVER FIELDS -->
+
+<label>Courier Name</label>
+<input name="courier_name" value="${data.courier_name || ''}" ${role !== 'driver' ? 'readonly' : ''}>
+
+<label>Temperature Type</label>
+<input name="temp_type" value="${data.temp_type || ''}" ${role !== 'driver' ? 'readonly' : ''}>
+
+<label>Shipping Temperature</label>
+<input type="number" name="shipping_temp" value="${data.shipping_temp || ''}" ${role !== 'driver' ? 'readonly' : ''}>
+
+<label>Delivery Temperature</label>
+<input type="number" name="delivery_temp" value="${data.delivery_temp || ''}" ${role !== 'driver' ? 'readonly' : ''}>
+
+<label>Collection Date & Time</label>
+<input type="datetime-local" name="collection_datetime" value="${data.collection_datetime || ''}" ${role !== 'driver' ? 'readonly' : ''}>
+
+<!-- LAB FIELDS -->
+
+<label>Receiver</label>
+<input name="receiver" value="${data.receiver || ''}" ${role !== 'lab' ? 'readonly' : ''}>
+
+<label>Receiving Date & Time</label>
+<input type="datetime-local" name="receiving_datetime" value="${data.receiving_datetime || ''}" ${role !== 'lab' ? 'readonly' : ''}>
+
+<label>Sample Status</label>
+<select name="sample_status" ${role !== 'lab' ? 'disabled' : ''}>
+<option value="">-- None Selected --</option>
+<option ${data.sample_status === "Testing" ? "selected" : ""}>Testing</option>
+<option ${data.sample_status === "Storage" ? "selected" : ""}>Storage</option>
+<option ${data.sample_status === "Disposed" ? "selected" : ""}>Disposed</option>
+</select>
+
+<button type="submit">Update COC</button>
+
+</form>
+
+</body>
+</html>
+`;
+}
+
 // ---------------- ROUTES ----------------
 
 app.get("/",(req,res)=>res.send(renderForm()));
+app.get("/coc/:id", (req, res) => {
+  const id = req.params.id;
+  const role = req.query.role || "site"; // default role
+
+  db.get("SELECT * FROM samples WHERE id = ?", [id], (err, row) => {
+    if (err || !row) return res.send("COC not found");
+
+    res.send(renderEditForm(row, role));
+  });
+});
 app.get("/view-pdfs", (req, res) => {
   const pdfDir = path.join(__dirname, "eCOC IC Labs");
 
@@ -644,6 +773,52 @@ res.redirect("/");
 
 });
 
+});
+
+app.post("/update/:id", (req, res) => {
+  const id = req.params.id;
+  const d = req.body;
+
+  db.run(`
+    UPDATE samples SET
+    protocol_name=?,
+    site_name=?,
+    shipping_date=?,
+    requisition_number=?,
+    pid=?,
+    sample_type=?,
+    courier_name=?,
+    temp_type=?,
+    shipping_temp=?,
+    delivery_temp=?,
+    collection_datetime=?,
+    receiver=?,
+    receiving_datetime=?,
+    sample_status=?
+    WHERE id=?
+  `,
+  [
+    d.protocol_name,
+    d.site_name,
+    d.shipping_date,
+    d.requisition_number,
+    d.pid,
+    d.sample_type,
+    d.courier_name,
+    d.temp_type,
+    d.shipping_temp,
+    d.delivery_temp,
+    d.collection_datetime,
+    d.receiver,
+    d.receiving_datetime,
+    d.sample_status,
+    id
+  ],
+  (err) => {
+    if (err) return res.send("Update error");
+
+    res.redirect(`/coc/${id}?role=${req.query.role}`);
+  });
 });
 
 if (!global.__portDeclared) {
