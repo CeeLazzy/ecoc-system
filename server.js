@@ -6,9 +6,9 @@ const path = require("path");
 const bwipjs = require("bwip-js");
 
 const app = express();
+app.use('/pdfs', express.static(path.join(__dirname, 'eCOC IC Labs')));
 const PORT = process.env.PORT || 3000;
 
-app.use('/pdfs', express.static(path.join(__dirname, 'eCOC IC Labs')));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(__dirname));
 
@@ -17,231 +17,446 @@ app.use(express.static(__dirname));
 const db = new sqlite3.Database("./ecoc.db");
 
 db.serialize(() => {
-  db.run(`
-    CREATE TABLE IF NOT EXISTS samples (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      protocol_name TEXT,
-      site_name TEXT,
-      shipping_date TEXT,
-      shipped_by TEXT,
-      courier_name TEXT,
-      page_numbers TEXT,
-      requisition_number TEXT,
-      pid TEXT,
-      sample_type TEXT,
-      shipping_temp REAL,
-      delivery_temp REAL,
-      temp_type TEXT,
-      sample_count_collected INTEGER,
-      sample_count_delivered INTEGER,
-      discrepancy_reason TEXT,
-      visit_number TEXT,
-      collection_datetime TEXT,
-      receiver TEXT,
-      receiving_datetime TEXT,
-      sample_status TEXT
-    )
-  `);
+db.run(`
+CREATE TABLE IF NOT EXISTS samples (
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+protocol_name TEXT,
+site_name TEXT,
+shipping_date TEXT,
+shipped_by TEXT,
+courier_name TEXT,
+page_numbers TEXT,
+requisition_number TEXT,
+pid TEXT,
+sample_type TEXT,
+shipping_temp REAL,
+delivery_temp REAL,
+temp_type TEXT,
+sample_count_collected INTEGER,
+sample_count_delivered INTEGER,
+discrepancy_reason TEXT,
+visit_number TEXT,
+collection_datetime TEXT,
+receiver TEXT,
+receiving_datetime TEXT,
+sample_status TEXT
+)
+`);
 });
 
 // ---------------- HELPERS ----------------
 
 function todayDate(){
-  return new Date().toISOString().split("T")[0];
+return new Date().toISOString().split("T")[0];
 }
 
 function formatDateTime(dt){
-  return dt ? dt.replace("T"," ") : "";
+return dt ? dt.replace("T"," ") : "";
 }
 
 // ---------------- FORM ----------------
 
-function renderForm(role) {
-  // Fields editable per role
-  const siteFields = ['protocol_name','site_name','shipping_date','requisition_number','pid','sample_type'];
-  const driverFields = ['temp_type','courier_name','shipping_temp','delivery_temp','collection_datetime'];
-  const labFields = ['receiver','receiving_datetime','sample_status'];
+function renderForm(){
 
-  function isDisabled(fieldName){
-    if(role === 'site') return !siteFields.includes(fieldName) ? 'disabled' : '';
-    if(role === 'driver') return !driverFields.includes(fieldName) ? 'disabled' : '';
-    if(role === 'lab') return !labFields.includes(fieldName) ? 'disabled' : '';
-    return '';
+return `
+<html>
+<head>
+
+<title>IC Labs eCOC</title>
+
+<style>
+.time-invalid{
+background-color:#fdeaea;
+border:2px solid #e74c3c;
+}
+temp-valid{
+background-color:#e8f8e8;
+border:2px solid #2ecc71;
+}
+
+temp-invalid{
+background-color:#fdeaea;
+border:2px solid #e74c3c;
+}
+body{
+font-family:Arial;
+padding:30px;
+background:#f4f6f9;
+
+}
+
+form{
+max-width:700px;
+margin:auto;
+background:white;
+padding:30px;
+border-radius:10px;
+box-shadow:0 4px 10px rgba(0,0,0,0.1);
+}
+
+label{
+font-weight:bold;
+margin-top:15px;
+display:block;
+}
+
+input,select{
+width:100%;
+padding:8px;
+margin-top:5px;
+border-radius:5px;
+border:1px solid #ccc;
+}
+
+button{
+margin-top:20px;
+padding:10px;
+width:100%;
+background:#2c3e50;
+color:white;
+border:none;
+border-radius:5px;
+cursor:pointer;
+}
+
+.hidden{
+display:none;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div style="text-align:center;margin-bottom:25px;">
+<img src="/IC_Labs_Logo.png" style="width:180px;">
+<p style="margin-top:5px;font-size:14px;color:#555;">
+Electronic Chain of Custody
+</p>
+</div>
+
+<form method="POST" action="/add">
+
+<label>Protocol Name</label>
+<select name="protocol_name" onchange="toggleOther(this,'protocolOther')">
+<option>Brilliant011</option>
+<option>Transgender</option>
+<option>Align</option>
+<option>Other</option>
+</select>
+<input id="protocolOther" name="protocolOther" class="hidden" placeholder="Enter Protocol">
+
+<label>Site Name</label>
+<select name="site_name" onchange="toggleOther(this,'siteOther')">
+<option>GSH J52</option>
+<option>Philippi Village</option>
+<option>Other</option>
+</select>
+<input id="siteOther" name="siteOther" class="hidden" placeholder="Enter Site">
+
+<label>Shipping Date</label>
+<input type="date" name="shipping_date" value="${todayDate()}">
+
+<label>Shipped By</label>
+<select name="shipped_by" onchange="toggleOther(this,'shipOther')">
+<option>Dorothy</option>
+<option>Anele</option>
+<option>Other</option>
+</select>
+<input id="shipOther" name="shipOther" class="hidden" placeholder="Enter Name">
+
+<label>Courier Name</label>
+<select name="courier_name" onchange="toggleOther(this,'courierOther')">
+<option>Rodon Global</option>
+<option>Other</option>
+</select>
+<input id="courierOther" name="courierOther" class="hidden" placeholder="Enter Courier">
+
+<label>Page Numbers</label>
+<input name="page_numbers">
+
+<label>Requisition Number</label>
+<input name="requisition_number">
+
+<label>PID</label>
+<input name="pid">
+
+<label>Sample Type</label>
+<select name="sample_type" onchange="toggleOther(this,'sampleOther')">
+<option>Blood</option>
+<option>Leukopak</option>
+<option>Sputum</option>
+<option>Urine</option>
+<option>Other</option>
+</select>
+<input id="sampleOther" name="sampleOther" class="hidden" placeholder="Enter Sample Type">
+
+
+
+<label>Temperature Type</label>
+<select name="temp_type" onchange="toggleOther(this,'tempOther');checkTemp();">
+<option>Ambient</option>
+<option>Refrigerated</option>
+<option>Other</option>
+</select>
+<input id="tempOther" name="tempOther" class="hidden" type="text" placeholder="Enter Temperature Type">
+
+<label>Shipping Temperature</label>
+<input type="number" step="0.1" name="shipping_temp" id="shipTemp" oninput="checkTemp()">
+<div id="shipTempMsg" style="font-size:13px;margin-top:3px;"></div>
+
+<label>Delivery Temperature</label>
+<input type="number" step="0.1" name="delivery_temp" id="delTemp" oninput="checkTemp()">
+<div id="delTempMsg" style="font-size:13px;margin-top:3px;"></div>
+
+<label>Tube Count Collected</label>
+<input type="number" id="collected" name="sample_count_collected" onkeyup="checkTubes()">
+
+<label>Tube Count Delivered</label>
+<input type="number" id="delivered" name="sample_count_delivered" onkeyup="checkTubes()">
+
+<div id="discrepancyDiv" class="hidden">
+
+<label>Tube Discrepancy Reason</label>
+<input name="discrepancy_reason">
+
+</div>
+
+<label>Visit Number</label>
+<input name="visit_number">
+
+<label>Collection Date & Time</label>
+<input type="datetime-local" id="collectionTime" name="collection_datetime" oninput="checkTransitTime()">
+
+<label>Receiver</label>
+<select name="receiver" onchange="toggleOther(this,'receiverOther')">
+<option>Natasha.G</option>
+<option>Drew.M</option>
+<option>Lameez.P</option>
+<option>Nthabiseng</option>
+<option>Viola</option>
+<option>Other</option>
+</select>
+
+<input id="receiverOther" name="receiverOther" class="hidden" type="text" placeholder="Enter Receiver Name">
+
+<label>Receiving Date & Time</label>
+<input type="datetime-local" id="receivingTime" name="receiving_datetime" oninput="checkTransitTime()">
+<div id="timeErrorMsg" style="font-size:13px;margin-top:3px;"></div>
+
+<label>Sample Status</label>
+<select name="sample_status">
+<option value="">-- None Selected --</option>
+<option>Testing</option>
+<option>Storage</option>
+<option>Disposed</option>
+</select>
+
+<button type="submit">Generate eCOC</button>
+
+<div id="statusBar" style="
+  margin-top:20px;
+  padding:10px;
+  background:#eef6ff;
+  border-radius:5px;
+  font-size:14px;
+  display:flex;
+  justify-content:space-between;
+  box-shadow:0 2px 4px rgba(0,0,0,0.1);
+">
+  <span>Collection: <span id="statusCollection">-</span></span>
+  <span>In Transit: <span id="statusTransit">-</span></span>
+  <span>Receiving: <span id="statusReceiving">-</span></span>
+</div>
+</form>
+
+<script>
+
+function updateStatusBar(){
+    const collectionField = document.getElementById("collectionTime");
+    const receivingField = document.getElementById("receivingTime");
+
+    const statusCollection = document.getElementById("statusCollection");
+    const statusTransit = document.getElementById("statusTransit");
+    const statusReceiving = document.getElementById("statusReceiving");
+
+    const collection = new Date(collectionField.value);
+    const receiving = new Date(receivingField.value);
+    const now = new Date();
+
+    // Display collection time
+    statusCollection.textContent = collectionField.value ? collection.toLocaleString() : "-";
+
+    // Display receiving time
+    statusReceiving.textContent = receivingField.value ? receiving.toLocaleString() : "-";
+
+    // Compute transit
+    if(collectionField.value){
+        const endTime = receivingField.value ? receiving : now;
+        let diffMs = endTime - collection;
+        if(diffMs < 0) diffMs = 0;
+        const hours = Math.floor(diffMs/(1000*60*60));
+        const minutes = Math.floor((diffMs%(1000*60*60))/(1000*60));
+        statusTransit.textContent = hours + "h " + minutes + "m";
+    } else {
+        statusTransit.textContent = "-";
+    }
+}
+
+// Update whenever user changes collection or receiving time
+document.getElementById("collectionTime").addEventListener("input", updateStatusBar);
+document.getElementById("receivingTime").addEventListener("input", updateStatusBar);
+
+// Initialize on page load
+updateStatusBar();
+function checkTransitTime(){
+
+const collectionField = document.getElementById("collectionTime");
+const receivingField = document.getElementById("receivingTime");
+
+const msg = document.getElementById("timeErrorMsg");
+
+receivingField.classList.remove("time-invalid");
+
+const collection = new Date(collectionField.value);
+const receiving = new Date(receivingField.value);
+
+if(!collectionField.value || !receivingField.value){
+msg.innerHTML="";
+return;
+}
+
+if(receiving < collection){
+
+msg.innerHTML="⚠ Receiving time cannot be before collection time";
+msg.style.color="red";
+
+receivingField.classList.add("time-invalid");
+
+}else{
+
+msg.innerHTML="✓ Time sequence valid";
+msg.style.color="green";
+
+}
+
+}
+function checkTemp(){
+
+const type = document.querySelector('[name="temp_type"]').value;
+if(type === "Other"){
+
+document.getElementById("shipTempMsg").innerHTML="";
+document.getElementById("delTempMsg").innerHTML="";
+
+document.getElementById("shipTemp").classList.remove("temp-valid","temp-invalid");
+document.getElementById("delTemp").classList.remove("temp-valid","temp-invalid");
+
+return;
+
+}
+
+const shipField = document.getElementById("shipTemp");
+const delField = document.getElementById("delTemp");
+
+const shipTemp = parseFloat(shipField.value);
+const delTemp = parseFloat(delField.value);
+
+const shipMsg = document.getElementById("shipTempMsg");
+const delMsg = document.getElementById("delTempMsg");
+
+function validate(temp, field, msg){
+
+field.classList.remove("temp-valid","temp-invalid");
+
+if(isNaN(temp)){
+msg.innerHTML="";
+return;
+}
+
+let min,max;
+
+if(type==="Ambient"){
+min=15;
+max=25;
+}
+
+if(type==="Refrigerated"){
+min=2;
+max=8;
+}
+
+if(temp < min){
+msg.innerHTML="⚠ Temperature BELOW range ("+min+"-"+max+"°C)";
+msg.style.color="red";
+field.classList.add("temp-invalid");
+}
+
+else if(temp > max){
+msg.innerHTML="⚠ Temperature ABOVE range ("+min+"-"+max+"°C)";
+msg.style.color="red";
+field.classList.add("temp-invalid");
+}
+
+else{
+msg.innerHTML="✓ Temperature within range";
+msg.style.color="green";
+field.classList.add("temp-valid");
+}
+
+}
+
+validate(shipTemp, shipField, shipMsg);
+validate(delTemp, delField, delMsg);
+
+}
+
+function toggleOther(select, input) {
+  const field = document.getElementById(input);
+
+  if (select.value === "Other") {
+    field.style.display = "block";
+    field.focus();
+  } else {
+    field.style.display = "none";
+    field.value = "";
   }
+}
 
-  return `
-  <html>
-  <head>
-    <title>IC Labs eCOC</title>
-    <style>
-    /* Keep all your existing CSS */
-    .time-invalid{background-color:#fdeaea;border:2px solid #e74c3c;}
-    .temp-valid{background-color:#e8f8e8;border:2px solid #2ecc71;}
-    .temp-invalid{background-color:#fdeaea;border:2px solid #e74c3c;}
-    body{font-family:Arial;padding:30px;background:#f4f6f9;}
-    form{max-width:700px;margin:auto;background:white;padding:30px;border-radius:10px;box-shadow:0 4px 10px rgba(0,0,0,0.1);}
-    label{font-weight:bold;margin-top:15px;display:block;}
-    input,select{width:100%;padding:8px;margin-top:5px;border-radius:5px;border:1px solid #ccc;}
-    button{margin-top:20px;padding:10px;width:100%;background:#2c3e50;color:white;border:none;border-radius:5px;cursor:pointer;}
-    .hidden{display:none;}
-    </style>
-  </head>
-  <body>
-    <div style="text-align:center;margin-bottom:25px;">
-      <img src="/IC_Labs_Logo.png" style="width:180px;">
-      <p style="margin-top:5px;font-size:14px;color:#555;">Electronic Chain of Custody</p>
-    </div>
+function checkTubes(){
 
-    <form method="POST" action="/add">
-      <label>Protocol Name</label>
-      <select name="protocol_name" onchange="toggleOther(this,'protocolOther')" ${isDisabled('protocol_name')}>
-        <option>Brilliant011</option><option>Transgender</option><option>Align</option><option>Other</option>
-      </select>
-      <input id="protocolOther" name="protocolOther" class="hidden" placeholder="Enter Protocol" ${isDisabled('protocol_name')}>
+var c=document.getElementById("collected").value;
+var d=document.getElementById("delivered").value;
 
-      <label>Site Name</label>
-      <select name="site_name" onchange="toggleOther(this,'siteOther')" ${isDisabled('site_name')}>
-        <option>GSH J52</option><option>Philippi Village</option><option>Other</option>
-      </select>
-      <input id="siteOther" name="siteOther" class="hidden" placeholder="Enter Site" ${isDisabled('site_name')}>
+if(c && d && c!==d){
+document.getElementById("discrepancyDiv").style.display="block";
+}else{
+document.getElementById("discrepancyDiv").style.display="none";
+}
 
-      <label>Shipping Date</label>
-      <input type="date" name="shipping_date" value="${todayDate()}" ${isDisabled('shipping_date')}>
+}
 
-      <label>Requisition Number</label>
-      <input name="requisition_number" ${isDisabled('requisition_number')}>
+</script>
 
-      <label>PID</label>
-      <input name="pid" ${isDisabled('pid')}>
-
-      <label>Sample Type</label>
-      <select name="sample_type" onchange="toggleOther(this,'sampleOther')" ${isDisabled('sample_type')}>
-        <option>Blood</option><option>Leukopak</option><option>Sputum</option><option>Urine</option><option>Other</option>
-      </select>
-      <input id="sampleOther" name="sampleOther" class="hidden" placeholder="Enter Sample Type" ${isDisabled('sample_type')}>
-
-      <label>Temperature Type</label>
-      <select name="temp_type" onchange="toggleOther(this,'tempOther');checkTemp();" ${isDisabled('temp_type')}>
-        <option>Ambient</option><option>Refrigerated</option><option>Other</option>
-      </select>
-      <input id="tempOther" name="tempOther" class="hidden" type="text" placeholder="Enter Temperature Type" ${isDisabled('temp_type')}>
-
-      <label>Shipping Temperature</label>
-      <input type="number" step="0.1" name="shipping_temp" id="shipTemp" oninput="checkTemp()" ${isDisabled('shipping_temp')}>
-      <div id="shipTempMsg" style="font-size:13px;margin-top:3px;"></div>
-
-      <label>Delivery Temperature</label>
-      <input type="number" step="0.1" name="delivery_temp" id="delTemp" oninput="checkTemp()" ${isDisabled('delivery_temp')}>
-      <div id="delTempMsg" style="font-size:13px;margin-top:3px;"></div>
-
-      <label>Collection Date & Time</label>
-      <input type="datetime-local" id="collectionTime" name="collection_datetime" oninput="checkTransitTime()" ${isDisabled('collection_datetime')}>
-
-      <label>Receiver</label>
-      <select name="receiver" onchange="toggleOther(this,'receiverOther')" ${isDisabled('receiver')}>
-        <option>Natasha.G</option><option>Drew.M</option><option>Lameez.P</option><option>Nthabiseng</option><option>Viola</option><option>Other</option>
-      </select>
-      <input id="receiverOther" name="receiverOther" class="hidden" type="text" placeholder="Enter Receiver Name" ${isDisabled('receiver')}>
-
-      <label>Receiving Date & Time</label>
-      <input type="datetime-local" id="receivingTime" name="receiving_datetime" oninput="checkTransitTime()" ${isDisabled('receiving_datetime')}>
-
-      <label>Sample Status</label>
-      <select name="sample_status" ${isDisabled('sample_status')}>
-        <option value="">-- None Selected --</option><option>Testing</option><option>Storage</option><option>Disposed</option>
-      </select>
-
-      <button type="submit">Generate eCOC</button>
-    </form>
-
-    <script>
-      // Keep all your existing JS functions (toggleOther, checkTemp, checkTransitTime, etc.)
-    </script>
-  </body>
-  </html>
-  `;
+</body>
+</html>
+`;
 }
 
 // ---------------- ROUTES ----------------
 
-// ---------------- LOGIN ----------------
-const rolePasswords = {
-  site: "site123",
-  driver: "driver123",
-  lab: "lab123"
-};
-
-app.get("/login", (req, res) => {
-  res.send(`
-    <html>
-      <head>
-        <title>eCOC Login</title>
-        <style>
-          body { font-family: Arial; padding: 50px; background: #f4f6f9; text-align: center; }
-          input, select, button { padding: 10px; margin: 10px; width: 200px; }
-          button { background: #2c3e50; color: white; border: none; border-radius: 5px; cursor: pointer; }
-        </style>
-      </head>
-      <body>
-        <h2>eCOC Access</h2>
-        <form method="POST" action="/login">
-          <label>Role:</label><br>
-          <select name="role">
-            <option value="site">Site</option>
-            <option value="driver">Driver</option>
-            <option value="lab">Lab</option>
-          </select><br>
-          <label>Password:</label><br>
-          <input type="password" name="password"><br>
-          <button type="submit">Enter</button>
-        </form>
-      </body>
-    </html>
-  `);
-});
-
-app.post("/login", (req, res) => {
-  const { role, password } = req.body;
-
-  if(rolePasswords[role] && password === rolePasswords[role]) {
-    res.redirect(`/form?role=${role}`);
-  } else {
-    res.send("<h3>Invalid role or password. <a href='/login'>Try again</a></h3>");
-  }
-});
-
-app.get("/form", (req, res) => {
-  const role = req.query.role;
-  if(!role || !["site","driver","lab"].includes(role)){
-    return res.redirect("/login");
-  }
-  res.send(renderForm(role));
-});
-
-app.get("/new", (req, res) => {
-  const role = req.query.role || "site";
-  res.send(renderForm(role));
-});
-
-app.get("/coc/:id", (req, res) => {
-  const id = req.params.id;
-  const role = req.query.role || "site";
-
-  db.get("SELECT * FROM samples WHERE id = ?", [id], (err, row) => {
-    if (err || !row) return res.send("COC not found");
-
-    res.send(renderEditForm(row, role));
-  });
-});
-
+app.get("/",(req,res)=>res.send(renderForm()));
 app.get("/view-pdfs", (req, res) => {
   const pdfDir = path.join(__dirname, "eCOC IC Labs");
 
   fs.readdir(pdfDir, (err, files) => {
     if (err) return res.send("Error reading PDF folder.");
 
+    // Filter only .pdf files
     const pdfFiles = files.filter(f => f.endsWith(".pdf"));
 
+    // Create a simple HTML page with links
     let html = "<h2>All eCOC PDFs</h2><ul>";
     pdfFiles.forEach(file => {
       html += `<li><a href="/pdfs/${file}" target="_blank">${file}</a></li>`;
@@ -252,71 +467,185 @@ app.get("/view-pdfs", (req, res) => {
   });
 });
 
-// ---------------- ADD ----------------
 app.post("/add", async (req,res)=>{
-  const d=req.body;
 
-  const protocol=d.protocol_name==="Other"?d.protocolOther:d.protocol_name;
-  const site=d.site_name==="Other"?d.siteOther:d.site_name;
-  const shipper=d.shipped_by==="Other"?d.shipOther:d.shipped_by;
-  const courier=d.courier_name==="Other"?d.courierOther:d.courier_name;
-  const sampleType=d.sample_type==="Other"?d.sampleOther:d.sample_type;
-  const receiver=d.receiver==="Other"?d.receiverOther:d.receiver;
-  const tempType=d.temp_type==="Other"?d.tempOther:d.temp_type;
+const d=req.body;
 
-  db.run(`
-    INSERT INTO samples (
-      protocol_name,site_name,shipping_date,shipped_by,courier_name,
-      page_numbers,requisition_number,pid,sample_type,
-      shipping_temp,delivery_temp,temp_type,
-      sample_count_collected,sample_count_delivered,discrepancy_reason,
-      visit_number,collection_datetime,receiver,receiving_datetime,sample_status
-    )
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-  `,
-  [
-    protocol,site,d.shipping_date,shipper,courier,
-    d.page_numbers,d.requisition_number,d.pid,sampleType,
-    d.shipping_temp,d.delivery_temp,tempType,
-    d.sample_count_collected,d.sample_count_delivered,d.discrepancy_reason,
-    d.visit_number,d.collection_datetime,d.receiver,d.receiving_datetime,d.sample_status
-  ],
-  async function(err){
-    if(err) return res.send("DB Error: "+err.message);
+const protocol=d.protocol_name==="Other"?d.protocolOther:d.protocol_name;
+const site=d.site_name==="Other"?d.siteOther:d.site_name;
+const shipper=d.shipped_by==="Other"?d.shipOther:d.shipped_by;
+const courier=d.courier_name==="Other"?d.courierOther:d.courier_name;
+const sampleType=d.sample_type==="Other"?d.sampleOther:d.sample_type;
+const receiver=d.receiver==="Other"?d.receiverOther:d.receiver;
+const tempType=d.temp_type==="Other"?d.tempOther:d.temp_type;
 
-    // PDF creation logic (unchanged)
-    // ...
-    res.redirect("/");
-  });
+db.run(`
+INSERT INTO samples (
+protocol_name,site_name,shipping_date,shipped_by,courier_name,
+page_numbers,requisition_number,pid,sample_type,
+shipping_temp,delivery_temp,temp_type,
+sample_count_collected,sample_count_delivered,discrepancy_reason,
+visit_number,collection_datetime,receiver,receiving_datetime,sample_status
+)
+VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+`,
+[
+protocol,site,d.shipping_date,shipper,courier,
+d.page_numbers,d.requisition_number,d.pid,sampleType,
+d.shipping_temp,d.delivery_temp,tempType,
+d.sample_count_collected,d.sample_count_delivered,d.discrepancy_reason,
+d.visit_number,d.collection_datetime,d.receiver,d.receiving_datetime,d.sample_status
+],
+async function(err){
+
+if(err) return res.send("DB Error: "+err.message);
+
+// PDF CREATION
+
+const folderPath=path.join(__dirname,"eCOC IC Labs");
+
+if(!fs.existsSync(folderPath)) fs.mkdirSync(folderPath);
+
+const year=new Date().getFullYear();
+const docRefNum=`IC-${year}-${String(this.lastID).padStart(4,'0')}`;
+
+const doc=new PDFDocument({margin:50});
+const filePath=path.join(folderPath,`eCOC_${this.lastID}.pdf`);
+
+doc.pipe(fs.createWriteStream(filePath));
+
+const leftMargin=50;
+const tableLabelWidth=160;
+const tableValueX=leftMargin+tableLabelWidth;
+
+// IC LABS LOGO
+
+const icLogoPath=path.join(__dirname,'IC_Labs_Logo.png');
+
+if(fs.existsSync(icLogoPath)){
+doc.image(icLogoPath, doc.page.width/2 - 60, 5, {width:120});
+doc.moveDown(5);
+}
+
+// BARCODE
+
+try{
+
+const pngBuffer=await bwipjs.toBuffer({
+bcid:'code128',
+text:docRefNum,
+scale:1.2,
+height:6,
+includetext:false
 });
 
-// ---------------- UPDATE ----------------
-app.post("/update/:id", (req, res) => {
-  const id = req.params.id;
-  const d = req.body;
+doc.image(pngBuffer, doc.page.width-200, 50,{width:100});
 
-  db.run(`
-    UPDATE samples SET
-      protocol_name=?, site_name=?, shipping_date=?, requisition_number=?,
-      pid=?, sample_type=?, courier_name=?, temp_type=?,
-      shipping_temp=?, delivery_temp=?, collection_datetime=?,
-      receiver=?, receiving_datetime=?, sample_status=?
-    WHERE id=?
-  `,
-  [
-    d.protocol_name,d.site_name,d.shipping_date,d.requisition_number,
-    d.pid,d.sample_type,d.courier_name,d.temp_type,
-    d.shipping_temp,d.delivery_temp,d.collection_datetime,
-    d.receiver,d.receiving_datetime,d.sample_status,id
-  ],
-  (err) => {
-    if (err) return res.send("Update error");
+}catch(err){}
 
-    res.redirect(`/coc/${id}?role=${req.query.role}`);
-  });
+doc.fontSize(10);
+
+function addField(label,value){
+
+doc.font('Helvetica-Bold').text(label+":",leftMargin,doc.y);
+doc.font('Helvetica').text(value||"-",tableValueX,doc.y-10);
+doc.moveDown(1);
+
+}
+
+addField("Document Ref Number",docRefNum);
+addField("Protocol Name",protocol);
+addField("Site Name",site);
+addField("Shipping Date",formatDateTime(d.shipping_date));
+addField("Shipped By",shipper);
+addField("Courier Name",courier);
+addField("Page Numbers",d.page_numbers);
+addField("Requisition Number",d.requisition_number);
+addField("PID",d.pid);
+addField("Sample Type",sampleType);
+addField("Temperature Type",tempType);
+addField("Shipping Temperature",d.shipping_temp+" °C");
+addField("Delivery Temperature",d.delivery_temp+" °C");
+addField("Collection Date & Time",formatDateTime(d.collection_datetime));
+addField("Receiver",receiver);
+addField("Receiving Date & Time",formatDateTime(d.receiving_datetime));
+// TIME IN TRANSIT
+
+if(d.collection_datetime && d.receiving_datetime){
+
+const collection = new Date(d.collection_datetime);
+const receiving = new Date(d.receiving_datetime);
+
+const diffMs = receiving - collection;
+
+if(diffMs > 0){
+
+const hours = Math.floor(diffMs / (1000 * 60 * 60));
+const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+
+const transitTime = hours + " hours " + minutes + " minutes";
+
+addField("Time in Transit", transitTime);
+
+}
+
+}
+
+// STATUS
+
+let status=d.sample_status;
+
+if(!status){
+status="In Transit";
+}
+
+addField("Sample Status",status);
+
+// STORAGE TIMER
+
+if(status==="Storage"){
+
+const receiving=new Date(d.receiving_datetime);
+
+if(!isNaN(receiving)){
+
+const now=new Date();
+
+const diffMs=now-receiving;
+
+const hours=Math.floor(diffMs/(1000*60*60));
+const minutes=Math.floor((diffMs%(1000*60*60))/(1000*60));
+
+addField("Time in Storage",hours+" hours "+minutes+" minutes");
+
+}
+
+}
+
+// RODON FOOTER
+
+const rodonLogoPath=path.join(__dirname,'Rodon_Logo.png');
+
+const centerX = doc.page.width / 2;
+
+if(fs.existsSync(rodonLogoPath)){
+
+doc.image(rodonLogoPath, centerX - 25, doc.page.height - 80, {width:50});
+
+doc.fontSize(10)
+.font('Helvetica-Bold')
+.text("Sponsored by Rodon Global", centerX, doc.page.height - 65, {align:"center"});
+
+}
+
+doc.end();
+
+res.redirect("/");
+
 });
 
-// ---------------- SERVER ----------------
+});
+
 if (!global.__portDeclared) {
     app.listen(PORT, () => console.log("Server running on port " + PORT));
     global.__portDeclared = true;
