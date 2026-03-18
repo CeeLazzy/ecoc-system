@@ -192,7 +192,7 @@ Electronic Chain of Custody
 <input name="page_numbers"${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
 
 <label>Requisition Number</label>
-<input name="requisition_number" value="${data.requisition_number || ""}">${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
+<input name="requisition_number" value="${data.requisition_number || ""}" ${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
 
 <label>PID</label>
 <input name="pid" value="${data.pid || ""}">${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
@@ -740,6 +740,8 @@ doc.end();
 res.redirect("/");
 
 });
+
+}
 
 });
 
