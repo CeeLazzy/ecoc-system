@@ -5,12 +5,22 @@ const fs = require("fs");
 const path = require("path");
 const bwipjs = require("bwip-js");
 
+
 const app = express();
 app.use('/pdfs', express.static(path.join(__dirname, 'eCOC IC Labs')));
 const PORT = process.env.PORT || 3000;
 
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(__dirname));
+
+// ---------------- ROLE-BASED LOGIN ----------------
+
+// Define users and passwords
+const users = {
+    site: "site123",
+    driver: "driver123",
+    lab: "lab123"
+};
 
 // ---------------- DATABASE ----------------
 
@@ -444,9 +454,60 @@ document.getElementById("discrepancyDiv").style.display="none";
 `;
 }
 
+// GET login page
+app.get("/login", (req, res) => {
+    res.send(`
+    <html>
+    <head>
+      <title>eCOC Login</title>
+      <style>
+        body { font-family: Arial; padding: 50px; background: #f4f6f9; text-align: center; }
+        input, select, button { padding: 10px; margin: 10px; width: 200px; }
+        button { background: #2c3e50; color: white; border: none; border-radius: 5px; cursor: pointer; }
+      </style>
+    </head>
+    <body>
+      <h2>eCOC Access</h2>
+      <form method="POST" action="/login">
+        <label>Role:</label><br>
+        <select name="role">
+          <option value="site">Site</option>
+          <option value="driver">Driver</option>
+          <option value="lab">Lab</option>
+        </select><br>
+        <label>Password:</label><br>
+        <input type="password" name="password"><br>
+        <button type="submit">Enter</button>
+      </form>
+    </body>
+    </html>
+    `);
+});
+
+// POST login form
+app.post("/login", express.urlencoded({ extended: true }), (req, res) => {
+    const { role, password } = req.body;
+
+    if (users[role] && password === users[role]) {
+        res.redirect(`/form?role=${role}`);
+    } else {
+        res.send(`<h3>Invalid role or password. <a href='/login'>Try again</a></h3>`);
+    }
+});
+
+// GET form with role query
+app.get("/form", (req, res) => {
+    const role = req.query.role;
+    if (!role || !["site","driver","lab"].includes(role)) {
+        return res.redirect("/login");
+    }
+
+    res.send(renderForm());
+});
+
 // ---------------- ROUTES ----------------
 
-app.get("/",(req,res)=>res.send(renderForm()));
+app.get("/", (req, res) => res.redirect("/login"));
 app.get("/view-pdfs", (req, res) => {
   const pdfDir = path.join(__dirname, "eCOC IC Labs");
 
