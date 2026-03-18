@@ -444,103 +444,134 @@ document.getElementById("discrepancyDiv").style.display="none";
 `;
 }
 
-function renderEditForm(sample, role) {
-  // Determine which fields are editable based on role
-  const editable = {
-    protocol_name: role === "site",
-    site_name: role === "site",
-    shipping_date: role === "site",
-    requisition_number: role === "site",
-    pid: role === "site",
-    sample_type: role === "site",
+function renderForm(role = "site") {
 
-    temp_type: role === "driver",
-    courier_name: role === "driver",
-    shipping_temp: role === "driver",
-    delivery_temp: role === "driver",
-    collection_datetime: role === "driver",
-
-    receiver: role === "lab",
-    receiving_datetime: role === "lab",
-    sample_status: role === "lab",
-  };
-
-  // Helper to disable fields
-  const disabled = (field) => (editable[field] ? "" : "disabled");
+  // Helpers to control field access
+  const editable = (allowedRoles) => allowedRoles.includes(role) ? "" : "readonly";
+  const selectable = (allowedRoles) => allowedRoles.includes(role) ? "" : "disabled";
 
   return `
 <html>
 <head>
-<title>IC Labs eCOC Edit</title>
+<title>IC Labs eCOC</title>
 <style>
-body { font-family: Arial; padding: 30px; background: #f4f6f9; }
-form { max-width: 700px; margin: auto; background: white; padding: 30px; border-radius: 10px; box-shadow:0 4px 10px rgba(0,0,0,0.1); }
-label { font-weight: bold; margin-top: 15px; display: block; }
-input, select { width: 100%; padding: 8px; margin-top: 5px; border-radius: 5px; border: 1px solid #ccc; }
-button { margin-top: 20px; padding: 10px; width: 100%; background: #2c3e50; color: white; border: none; border-radius: 5px; cursor: pointer; }
+.time-invalid{background-color:#fdeaea;border:2px solid #e74c3c;}
+temp-valid{background-color:#e8f8e8;border:2px solid #2ecc71;}
+temp-invalid{background-color:#fdeaea;border:2px solid #e74c3c;}
+body{font-family:Arial;padding:30px;background:#f4f6f9;}
+form{max-width:700px;margin:auto;background:white;padding:30px;border-radius:10px;box-shadow:0 4px 10px rgba(0,0,0,0.1);}
+label{font-weight:bold;margin-top:15px;display:block;}
+input,select{width:100%;padding:8px;margin-top:5px;border-radius:5px;border:1px solid #ccc;}
+button{margin-top:20px;padding:10px;width:100%;background:#2c3e50;color:white;border:none;border-radius:5px;cursor:pointer;}
+.hidden{display:none;}
 </style>
 </head>
 <body>
 
-<h2>Edit eCOC #${sample.id} (Role: ${role})</h2>
+<div style="text-align:center;margin-bottom:25px;">
+<img src="/IC_Labs_Logo.png" style="width:180px;">
+<p style="margin-top:5px;font-size:14px;color:#555;">Electronic Chain of Custody</p>
+</div>
 
-<form method="POST" action="/update/${sample.id}">
+<form method="POST" action="/add">
 
+<!-- Site fields -->
 <label>Protocol Name</label>
-<input name="protocol_name" value="${sample.protocol_name || ""}" ${disabled("protocol_name")}>
+<select name="protocol_name" ${selectable(["site"])}>
+  <option>Brilliant011</option>
+  <option>Transgender</option>
+  <option>Align</option>
+  <option>Other</option>
+</select>
+<input name="protocolOther" class="hidden" placeholder="Enter Protocol" ${editable(["site"])}>
 
 <label>Site Name</label>
-<input name="site_name" value="${sample.site_name || ""}" ${disabled("site_name")}>
+<select name="site_name" ${selectable(["site"])}>
+  <option>GSH J52</option>
+  <option>Philippi Village</option>
+  <option>Other</option>
+</select>
+<input name="siteOther" class="hidden" placeholder="Enter Site" ${editable(["site"])}>
 
 <label>Shipping Date</label>
-<input type="date" name="shipping_date" value="${sample.shipping_date || ""}" ${disabled("shipping_date")}>
+<input type="date" name="shipping_date" value="${todayDate()}" ${editable(["site"])}>
 
 <label>Requisition Number</label>
-<input name="requisition_number" value="${sample.requisition_number || ""}" ${disabled("requisition_number")}>
+<input name="requisition_number" ${editable(["site"])}>
 
 <label>PID</label>
-<input name="pid" value="${sample.pid || ""}" ${disabled("pid")}>
+<input name="pid" ${editable(["site"])}>
 
 <label>Sample Type</label>
-<input name="sample_type" value="${sample.sample_type || ""}" ${disabled("sample_type")}>
+<select name="sample_type" ${selectable(["site"])}>
+  <option>Blood</option>
+  <option>Leukopak</option>
+  <option>Sputum</option>
+  <option>Urine</option>
+  <option>Other</option>
+</select>
+<input name="sampleOther" class="hidden" placeholder="Enter Sample Type" ${editable(["site"])}>
 
+<!-- Driver fields -->
 <label>Temperature Type</label>
-<input name="temp_type" value="${sample.temp_type || ""}" ${disabled("temp_type")}>
+<select name="temp_type" ${selectable(["driver"])}>
+  <option>Ambient</option>
+  <option>Refrigerated</option>
+  <option>Other</option>
+</select>
+<input name="tempOther" class="hidden" type="text" placeholder="Enter Temperature Type" ${editable(["driver"])}>
 
 <label>Courier Name</label>
-<input name="courier_name" value="${sample.courier_name || ""}" ${disabled("courier_name")}>
+<select name="courier_name" ${selectable(["driver"])}>
+  <option>Rodon Global</option>
+  <option>Other</option>
+</select>
+<input name="courierOther" class="hidden" placeholder="Enter Courier" ${editable(["driver"])}>
 
 <label>Shipping Temperature</label>
-<input type="number" step="0.1" name="shipping_temp" value="${sample.shipping_temp || ""}" ${disabled("shipping_temp")}>
+<input type="number" step="0.1" name="shipping_temp" ${editable(["driver"])}>
 
 <label>Delivery Temperature</label>
-<input type="number" step="0.1" name="delivery_temp" value="${sample.delivery_temp || ""}" ${disabled("delivery_temp")}>
+<input type="number" step="0.1" name="delivery_temp" ${editable(["driver"])}>
 
 <label>Collection Date & Time</label>
-<input type="datetime-local" name="collection_datetime" value="${sample.collection_datetime || ""}" ${disabled("collection_datetime")}>
+<input type="datetime-local" name="collection_datetime" ${editable(["driver"])}>
 
+<!-- Lab fields -->
 <label>Receiver</label>
-<input name="receiver" value="${sample.receiver || ""}" ${disabled("receiver")}>
+<select name="receiver" ${selectable(["lab"])}>
+  <option>Natasha.G</option>
+  <option>Drew.M</option>
+  <option>Lameez.P</option>
+  <option>Nthabiseng</option>
+  <option>Viola</option>
+  <option>Other</option>
+</select>
+<input name="receiverOther" class="hidden" type="text" placeholder="Enter Receiver Name" ${editable(["lab"])}>
 
 <label>Receiving Date & Time</label>
-<input type="datetime-local" name="receiving_datetime" value="${sample.receiving_datetime || ""}" ${disabled("receiving_datetime")}>
+<input type="datetime-local" name="receiving_datetime" ${editable(["lab"])}>
 
 <label>Sample Status</label>
-<select name="sample_status" ${disabled("sample_status")}>
+<select name="sample_status" ${selectable(["lab"])}>
   <option value="">-- None Selected --</option>
-  <option value="Testing" ${sample.sample_status==="Testing"?"selected":""}>Testing</option>
-  <option value="Storage" ${sample.sample_status==="Storage"?"selected":""}>Storage</option>
-  <option value="Disposed" ${sample.sample_status==="Disposed"?"selected":""}>Disposed</option>
+  <option>Testing</option>
+  <option>Storage</option>
+  <option>Disposed</option>
 </select>
 
-<button type="submit">Update eCOC</button>
+<button type="submit">Generate eCOC</button>
 </form>
+
 </body>
 </html>
 `;
 }
 // ---------------- ROUTES ----------------
-
+app.get("/new", (req, res) => {
+    const role = req.query.role || "site"; // site, driver, or lab
+    res.send(renderForm(role));
+});
 app.get("/",(req,res)=>res.send(renderForm()));
 app.get("/coc/:id", (req, res) => {
   const id = req.params.id;
