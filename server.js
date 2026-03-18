@@ -66,7 +66,7 @@ return dt ? dt.replace("T"," ") : "";
 
 // ---------------- FORM ----------------
 
-function renderForm(role){
+function renderForm(role, data = {}){
 const isSite = role === "site";
 const isDriver = role === "driver";
 const isLab = role === "lab";
@@ -150,10 +150,11 @@ Electronic Chain of Custody
 </div>
 
 <form method="POST" action="/add">
+<input type="hidden" name="id" value="${data.id || ""}">
 <input type="hidden" name="role" value="${role}">
 
 <label>Protocol Name</label>
-<select name="protocol_name" onchange="toggleOther(this,'protocolOther')"${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
+<select name="protocol_name" onchange="toggleOther(this,'protocolOther')"value="${data.protocol_name || ""}">${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
 <option>Brilliant011</option>
 <option>Transgender</option>
 <option>Align</option>
@@ -191,10 +192,10 @@ Electronic Chain of Custody
 <input name="page_numbers"${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
 
 <label>Requisition Number</label>
-<input name="requisition_number"${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
+<input name="requisition_number" value="${data.requisition_number || ""}">${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
 
 <label>PID</label>
-<input name="pid"${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
+<input name="pid" value="${data.pid || ""}">${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
 
 <label>Sample Type</label>
 <select name="sample_type" onchange="toggleOther(this,'sampleOther')"${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
@@ -544,26 +545,57 @@ const sampleType=d.sample_type==="Other"?d.sampleOther:d.sample_type;
 const receiver=d.receiver==="Other"?d.receiverOther:d.receiver;
 const tempType=d.temp_type==="Other"?d.tempOther:d.temp_type;
 
-db.run(`
-INSERT INTO samples (
-protocol_name,site_name,shipping_date,shipped_by,courier_name,
-page_numbers,requisition_number,pid,sample_type,
-shipping_temp,delivery_temp,temp_type,
-sample_count_collected,sample_count_delivered,discrepancy_reason,
-visit_number,collection_datetime,receiver,receiving_datetime,sample_status
-)
-VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-`,
-[
-protocol,site,d.shipping_date,shipper,courier,
-d.page_numbers,d.requisition_number,d.pid,sampleType,
-d.shipping_temp,d.delivery_temp,tempType,
-d.sample_count_collected,d.sample_count_delivered,d.discrepancy_reason,
-d.visit_number,d.collection_datetime,d.receiver,d.receiving_datetime,d.sample_status
-],
-async function(err){
+if (d.id) {
 
-if(err) return res.send("DB Error: "+err.message);
+    db.run(`
+        UPDATE samples SET
+        protocol_name=?, site_name=?, shipping_date=?, shipped_by=?, courier_name=?,
+        page_numbers=?, requisition_number=?, pid=?, sample_type=?,
+        shipping_temp=?, delivery_temp=?, temp_type=?,
+        sample_count_collected=?, sample_count_delivered=?, discrepancy_reason=?,
+        visit_number=?, collection_datetime=?, receiver=?, receiving_datetime=?, sample_status=?
+        WHERE id=?
+    `,
+    [
+        protocol, site, d.shipping_date, shipper, courier,
+        d.page_numbers, d.requisition_number, d.pid, sampleType,
+        d.shipping_temp, d.delivery_temp, tempType,
+        d.sample_count_collected, d.sample_count_delivered, d.discrepancy_reason,
+        d.visit_number, d.collection_datetime, receiver, d.receiving_datetime, d.sample_status,
+        d.id
+    ],
+    function(err){
+
+        if(err) return res.send("Update Error: " + err.message);
+
+        return res.redirect("/");
+    });
+
+}
+
+// ================= INSERT =================
+else {
+
+    db.run(`
+    INSERT INTO samples (
+    protocol_name,site_name,shipping_date,shipped_by,courier_name,
+    page_numbers,requisition_number,pid,sample_type,
+    shipping_temp,delivery_temp,temp_type,
+    sample_count_collected,sample_count_delivered,discrepancy_reason,
+    visit_number,collection_datetime,receiver,receiving_datetime,sample_status
+    )
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+    `,
+    [
+    protocol,site,d.shipping_date,shipper,courier,
+    d.page_numbers,d.requisition_number,d.pid,sampleType,
+    d.shipping_temp,d.delivery_temp,tempType,
+    d.sample_count_collected,d.sample_count_delivered,d.discrepancy_reason,
+    d.visit_number,d.collection_datetime,receiver,d.receiving_datetime,d.sample_status
+    ],
+    async function(err){
+
+        if(err) return res.send("DB Error: "+err.message);
 
 // PDF CREATION
 
