@@ -444,125 +444,101 @@ document.getElementById("discrepancyDiv").style.display="none";
 `;
 }
 
-function renderEditForm(data, role){
+function renderEditForm(sample, role) {
+  // Determine which fields are editable based on role
+  const editable = {
+    protocol_name: role === "site",
+    site_name: role === "site",
+    shipping_date: role === "site",
+    requisition_number: role === "site",
+    pid: role === "site",
+    sample_type: role === "site",
 
-return `
+    temp_type: role === "driver",
+    courier_name: role === "driver",
+    shipping_temp: role === "driver",
+    delivery_temp: role === "driver",
+    collection_datetime: role === "driver",
+
+    receiver: role === "lab",
+    receiving_datetime: role === "lab",
+    sample_status: role === "lab",
+  };
+
+  // Helper to disable fields
+  const disabled = (field) => (editable[field] ? "" : "disabled");
+
+  return `
 <html>
 <head>
-<title>Edit eCOC</title>
-
+<title>IC Labs eCOC Edit</title>
 <style>
-body{
-font-family:Arial;
-padding:30px;
-background:#f4f6f9;
-}
-
-form{
-max-width:700px;
-margin:auto;
-background:white;
-padding:30px;
-border-radius:10px;
-box-shadow:0 4px 10px rgba(0,0,0,0.1);
-}
-
-label{
-font-weight:bold;
-margin-top:15px;
-display:block;
-}
-
-input,select{
-width:100%;
-padding:8px;
-margin-top:5px;
-border-radius:5px;
-border:1px solid #ccc;
-}
-
-button{
-margin-top:20px;
-padding:10px;
-width:100%;
-background:#2c3e50;
-color:white;
-border:none;
-border-radius:5px;
-cursor:pointer;
-}
+body { font-family: Arial; padding: 30px; background: #f4f6f9; }
+form { max-width: 700px; margin: auto; background: white; padding: 30px; border-radius: 10px; box-shadow:0 4px 10px rgba(0,0,0,0.1); }
+label { font-weight: bold; margin-top: 15px; display: block; }
+input, select { width: 100%; padding: 8px; margin-top: 5px; border-radius: 5px; border: 1px solid #ccc; }
+button { margin-top: 20px; padding: 10px; width: 100%; background: #2c3e50; color: white; border: none; border-radius: 5px; cursor: pointer; }
 </style>
-
 </head>
-
 <body>
 
-<h2 style="text-align:center;">Edit COC (Role: ${role})</h2>
+<h2>Edit eCOC #${sample.id} (Role: ${role})</h2>
 
-<form method="POST" action="/update/${data.id}?role=${role}">
-
-<!-- SITE FIELDS -->
+<form method="POST" action="/update/${sample.id}">
 
 <label>Protocol Name</label>
-<input name="protocol_name" value="${data.protocol_name || ''}" ${role !== 'site' ? 'readonly' : ''}>
+<input name="protocol_name" value="${sample.protocol_name || ""}" ${disabled("protocol_name")}>
 
 <label>Site Name</label>
-<input name="site_name" value="${data.site_name || ''}" ${role !== 'site' ? 'readonly' : ''}>
+<input name="site_name" value="${sample.site_name || ""}" ${disabled("site_name")}>
 
 <label>Shipping Date</label>
-<input type="date" name="shipping_date" value="${data.shipping_date || ''}" ${role !== 'site' ? 'readonly' : ''}>
+<input type="date" name="shipping_date" value="${sample.shipping_date || ""}" ${disabled("shipping_date")}>
 
 <label>Requisition Number</label>
-<input name="requisition_number" value="${data.requisition_number || ''}" ${role !== 'site' ? 'readonly' : ''}>
+<input name="requisition_number" value="${sample.requisition_number || ""}" ${disabled("requisition_number")}>
 
 <label>PID</label>
-<input name="pid" value="${data.pid || ''}" ${role !== 'site' ? 'readonly' : ''}>
+<input name="pid" value="${sample.pid || ""}" ${disabled("pid")}>
 
 <label>Sample Type</label>
-<input name="sample_type" value="${data.sample_type || ''}" ${role !== 'site' ? 'readonly' : ''}>
-
-<!-- DRIVER FIELDS -->
-
-<label>Courier Name</label>
-<input name="courier_name" value="${data.courier_name || ''}" ${role !== 'driver' ? 'readonly' : ''}>
+<input name="sample_type" value="${sample.sample_type || ""}" ${disabled("sample_type")}>
 
 <label>Temperature Type</label>
-<input name="temp_type" value="${data.temp_type || ''}" ${role !== 'driver' ? 'readonly' : ''}>
+<input name="temp_type" value="${sample.temp_type || ""}" ${disabled("temp_type")}>
+
+<label>Courier Name</label>
+<input name="courier_name" value="${sample.courier_name || ""}" ${disabled("courier_name")}>
 
 <label>Shipping Temperature</label>
-<input type="number" name="shipping_temp" value="${data.shipping_temp || ''}" ${role !== 'driver' ? 'readonly' : ''}>
+<input type="number" step="0.1" name="shipping_temp" value="${sample.shipping_temp || ""}" ${disabled("shipping_temp")}>
 
 <label>Delivery Temperature</label>
-<input type="number" name="delivery_temp" value="${data.delivery_temp || ''}" ${role !== 'driver' ? 'readonly' : ''}>
+<input type="number" step="0.1" name="delivery_temp" value="${sample.delivery_temp || ""}" ${disabled("delivery_temp")}>
 
 <label>Collection Date & Time</label>
-<input type="datetime-local" name="collection_datetime" value="${data.collection_datetime || ''}" ${role !== 'driver' ? 'readonly' : ''}>
-
-<!-- LAB FIELDS -->
+<input type="datetime-local" name="collection_datetime" value="${sample.collection_datetime || ""}" ${disabled("collection_datetime")}>
 
 <label>Receiver</label>
-<input name="receiver" value="${data.receiver || ''}" ${role !== 'lab' ? 'readonly' : ''}>
+<input name="receiver" value="${sample.receiver || ""}" ${disabled("receiver")}>
 
 <label>Receiving Date & Time</label>
-<input type="datetime-local" name="receiving_datetime" value="${data.receiving_datetime || ''}" ${role !== 'lab' ? 'readonly' : ''}>
+<input type="datetime-local" name="receiving_datetime" value="${sample.receiving_datetime || ""}" ${disabled("receiving_datetime")}>
 
 <label>Sample Status</label>
-<select name="sample_status" ${role !== 'lab' ? 'disabled' : ''}>
-<option value="">-- None Selected --</option>
-<option ${data.sample_status === "Testing" ? "selected" : ""}>Testing</option>
-<option ${data.sample_status === "Storage" ? "selected" : ""}>Storage</option>
-<option ${data.sample_status === "Disposed" ? "selected" : ""}>Disposed</option>
+<select name="sample_status" ${disabled("sample_status")}>
+  <option value="">-- None Selected --</option>
+  <option value="Testing" ${sample.sample_status==="Testing"?"selected":""}>Testing</option>
+  <option value="Storage" ${sample.sample_status==="Storage"?"selected":""}>Storage</option>
+  <option value="Disposed" ${sample.sample_status==="Disposed"?"selected":""}>Disposed</option>
 </select>
 
-<button type="submit">Update COC</button>
-
+<button type="submit">Update eCOC</button>
 </form>
-
 </body>
 </html>
 `;
 }
-
 // ---------------- ROUTES ----------------
 
 app.get("/",(req,res)=>res.send(renderForm()));
