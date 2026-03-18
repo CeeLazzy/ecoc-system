@@ -66,8 +66,8 @@ return dt ? dt.replace("T"," ") : "";
 
 // ---------------- FORM ----------------
 
-function renderForm(){
-
+function renderForm(role){
+const isSite = role === "site";
 return `
 <html>
 <head>
@@ -147,6 +147,7 @@ Electronic Chain of Custody
 </div>
 
 <form method="POST" action="/add">
+<input type="hidden" name="role" value="${role}">
 
 <label>Protocol Name</label>
 <select name="protocol_name" onchange="toggleOther(this,'protocolOther')">
@@ -177,7 +178,7 @@ Electronic Chain of Custody
 <input id="shipOther" name="shipOther" class="hidden" placeholder="Enter Name">
 
 <label>Courier Name</label>
-<select name="courier_name" onchange="toggleOther(this,'courierOther')">
+<select name="courier_name" onchange="toggleOther(this,'courierOther')"${isSite ? "disabled" : ""}>
 <option>Rodon Global</option>
 <option>Other</option>
 </select>
@@ -205,7 +206,7 @@ Electronic Chain of Custody
 
 
 <label>Temperature Type</label>
-<select name="temp_type" onchange="toggleOther(this,'tempOther');checkTemp();">
+<select name="temp_type" onchange="toggleOther(this,'tempOther');checkTemp();"${isSite ? "disabled" : ""}>
 <option>Ambient</option>
 <option>Refrigerated</option>
 <option>Other</option>
@@ -213,18 +214,18 @@ Electronic Chain of Custody
 <input id="tempOther" name="tempOther" class="hidden" type="text" placeholder="Enter Temperature Type">
 
 <label>Shipping Temperature</label>
-<input type="number" step="0.1" name="shipping_temp" id="shipTemp" oninput="checkTemp()">
+<input type="number" step="0.1" name="shipping_temp" id="shipTemp" oninput="checkTemp()"${isSite ? "disabled" : ""}>
 <div id="shipTempMsg" style="font-size:13px;margin-top:3px;"></div>
 
 <label>Delivery Temperature</label>
-<input type="number" step="0.1" name="delivery_temp" id="delTemp" oninput="checkTemp()">
+<input type="number" step="0.1" name="delivery_temp" id="delTemp" oninput="checkTemp()"${isSite ? "disabled" : ""}>
 <div id="delTempMsg" style="font-size:13px;margin-top:3px;"></div>
 
 <label>Tube Count Collected</label>
-<input type="number" id="collected" name="sample_count_collected" onkeyup="checkTubes()">
+<input type="number" id="collected" name="sample_count_collected" onkeyup="checkTubes()"${isSite ? "disabled" : ""}>
 
 <label>Tube Count Delivered</label>
-<input type="number" id="delivered" name="sample_count_delivered" onkeyup="checkTubes()">
+<input type="number" id="delivered" name="sample_count_delivered" onkeyup="checkTubes()"${isSite ? "disabled" : ""}>
 
 <div id="discrepancyDiv" class="hidden">
 
@@ -237,10 +238,10 @@ Electronic Chain of Custody
 <input name="visit_number">
 
 <label>Collection Date & Time</label>
-<input type="datetime-local" id="collectionTime" name="collection_datetime" oninput="checkTransitTime()">
+<input type="datetime-local" id="collectionTime" name="collection_datetime" oninput="checkTransitTime()"${isSite ? "disabled" : ""}>
 
 <label>Receiver</label>
-<select name="receiver" onchange="toggleOther(this,'receiverOther')">
+<select name="receiver" onchange="toggleOther(this,'receiverOther')"${isSite ? "disabled" : ""}>
 <option>Natasha.G</option>
 <option>Drew.M</option>
 <option>Lameez.P</option>
@@ -249,14 +250,14 @@ Electronic Chain of Custody
 <option>Other</option>
 </select>
 
-<input id="receiverOther" name="receiverOther" class="hidden" type="text" placeholder="Enter Receiver Name">
+<input id="receiverOther" name="receiverOther" class="hidden" type="text" placeholder="Enter Receiver Name"${isSite ? "disabled" : ""}>
 
 <label>Receiving Date & Time</label>
-<input type="datetime-local" id="receivingTime" name="receiving_datetime" oninput="checkTransitTime()">
+<input type="datetime-local" id="receivingTime" name="receiving_datetime" oninput="checkTransitTime()"${isSite ? "disabled" : ""}>
 <div id="timeErrorMsg" style="font-size:13px;margin-top:3px;"></div>
 
 <label>Sample Status</label>
-<select name="sample_status">
+<select name="sample_status"${isSite ? "disabled" : ""}>
 <option value="">-- None Selected --</option>
 <option>Testing</option>
 <option>Storage</option>
@@ -502,7 +503,7 @@ app.get("/form", (req, res) => {
         return res.redirect("/login");
     }
 
-    res.send(renderForm());
+    res.send(renderForm(role));
 });
 
 // ---------------- ROUTES ----------------
