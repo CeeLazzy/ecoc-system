@@ -163,7 +163,7 @@ Electronic Chain of Custody
 <input type="hidden" name="role" value="${role}">
 
 <label>Protocol Name</label>
-<select name="protocol_name" onchange="toggleOther(this,'protocolOther')"${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
+<select name="protocol_name" onchange="toggleOther(this,'protocolOther')"value="${data.protocol_name || ""}"${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
 <option>Brilliant011</option>
 <option>Transgender</option>
 <option>Align</option>
@@ -172,7 +172,7 @@ Electronic Chain of Custody
 <input id="protocolOther" name="protocolOther" class="hidden" placeholder="Enter Protocol">
 
 <label>Site Name</label>
-<select name="site_name" onchange="toggleOther(this,'siteOther')"${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
+<select name="site_name" onchange="toggleOther(this,'siteOther')"value="${data.site_name || ""}"${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
 <option>GSH J52</option>
 <option>Philippi Village</option>
 <option>Other</option>
@@ -183,7 +183,7 @@ Electronic Chain of Custody
 <input type="date" name="shipping_date" value="${todayDate()}"${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
 
 <label>Shipped By</label>
-<select name="shipped_by" onchange="toggleOther(this,'shipOther')"${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
+<select name="shipped_by" onchange="toggleOther(this,'shipOther')"value="${data.shipped_by || ""}"${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
 <option>Dorothy</option>
 <option>Anele</option>
 <option>Other</option>
@@ -191,7 +191,7 @@ Electronic Chain of Custody
 <input id="shipOther" name="shipOther" class="hidden" placeholder="Enter Name">
 
 <label>Courier Name</label>
-<select name="courier_name" onchange="toggleOther(this,'courierOther')"${isSite ? "disabled" : ""}${isLab ? "disabled" : ""}>
+<select name="courier_name" onchange="toggleOther(this,'courierOther')"value="${data.courier_name || ""}"${isSite ? "disabled" : ""}${isLab ? "disabled" : ""}>
 <option>Rodon Global</option>
 <option>Other</option>
 </select>
@@ -207,7 +207,7 @@ Electronic Chain of Custody
 <input name="pid" value="${data.pid || ""}">
 
 <label>Sample Type</label>
-<select name="sample_type" onchange="toggleOther(this,'sampleOther')"${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
+<select name="sample_type" onchange="toggleOther(this,'sampleOther')"value="${data.sample_type || ""}"${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
 <option>Blood</option>
 <option>Leukopak</option>
 <option>Sputum</option>
@@ -219,7 +219,7 @@ Electronic Chain of Custody
 
 
 <label>Temperature Type</label>
-<select name="temp_type" onchange="toggleOther(this,'tempOther');checkTemp();"${isSite ? "disabled" : ""}${isLab ? "disabled" : ""}>
+<select name="temp_type" onchange="toggleOther(this,'tempOther');checkTemp();"value="${data.temp_type || ""}"${isSite ? "disabled" : ""}${isLab ? "disabled" : ""}>
 <option>Ambient</option>
 <option>Refrigerated</option>
 <option>Other</option>
@@ -227,18 +227,18 @@ Electronic Chain of Custody
 <input id="tempOther" name="tempOther" class="hidden" type="text" placeholder="Enter Temperature Type">
 
 <label>Shipping Temperature</label>
-<input type="number" step="0.1" name="shipping_temp" id="shipTemp" oninput="checkTemp()"${isSite ? "disabled" : ""}${isLab ? "disabled" : ""}>
+<input type="number" step="0.1" name="shipping_temp" id="shipTemp" oninput="checkTemp()"value="${data.shipping_temp || ""}"${isSite ? "disabled" : ""}${isLab ? "disabled" : ""}>
 <div id="shipTempMsg" style="font-size:13px;margin-top:3px;"></div>
 
 <label>Delivery Temperature</label>
-<input type="number" step="0.1" name="delivery_temp" id="delTemp" oninput="checkTemp()"${isSite ? "disabled" : ""}${isLab ? "disabled" : ""}>
+<input type="number" step="0.1" name="delivery_temp" id="delTemp" oninput="checkTemp()"value="${data.delivert_temp || ""}"${isSite ? "disabled" : ""}${isLab ? "disabled" : ""}>
 <div id="delTempMsg" style="font-size:13px;margin-top:3px;"></div>
 
 <label>Tube Count Collected</label>
-<input type="number" id="collected" name="sample_count_collected" onkeyup="checkTubes()"${isSite ? "disabled" : ""}${isLab ? "disabled" : ""}>
+<input type="number" id="collected" name="sample_count_collected" onkeyup="checkTubes()"value="${data.sample_count_collected || ""}"${isSite ? "disabled" : ""}${isLab ? "disabled" : ""}>
 
 <label>Tube Count Delivered</label>
-<input type="number" id="delivered" name="sample_count_delivered" onkeyup="checkTubes()"${isSite ? "disabled" : ""}${isLab ? "disabled" : ""}>
+<input type="number" id="delivered" name="sample_count_delivered" onkeyup="checkTubes()"value="${data.sample_count_delivered || ""}"${isSite ? "disabled" : ""}${isLab ? "disabled" : ""}>
 
 <div id="discrepancyDiv" class="hidden">
 
@@ -254,7 +254,7 @@ Electronic Chain of Custody
 <input type="datetime-local" name="receiving_datetime" value="${data.receiving_datetime || ""}">
 
 <label>Receiver</label>
-<select name="receiver" onchange="toggleOther(this,'receiverOther')"${isSite ? "disabled" : ""}${isDriver ? "disabled" : ""}>
+<select name="receiver" onchange="toggleOther(this,'receiverOther')"value="${data.receiver || ""}"${isSite ? "disabled" : ""}${isDriver ? "disabled" : ""}>
 <option>Natasha.G</option>
 <option>Drew.M</option>
 <option>Lameez.P</option>
@@ -263,14 +263,14 @@ Electronic Chain of Custody
 <option>Other</option>
 </select>
 
-<input id="receiverOther" name="receiverOther" class="hidden" type="text" placeholder="Enter Receiver Name"${isSite ? "disabled" : ""}>
+<input id="receiverOther" name="receiverOther" class="hidden" type="text" placeholder="Enter Receiver Name"value="${data.receiverOther || ""}"${isSite ? "disabled" : ""}>
 
 <label>Receiving Date & Time</label>
 <input type="datetime-local" name="collection_datetime" value="${data.collection_datetime || ""}"${isSite ? "disabled" : ""}>
 <div id="timeErrorMsg" style="font-size:13px;margin-top:3px;"></div>
 
 <label>Sample Status</label>
-<select name="sample_status"${isSite ? "disabled" : ""}${isDriver ? "disabled" : ""}>
+<select name="sample_status"value="${data.sample_status || ""}"${isSite ? "disabled" : ""}${isDriver ? "disabled" : ""}>
 <option value="">-- None Selected --</option>
 <option>Testing</option>
 <option>Storage</option>
