@@ -142,6 +142,14 @@ display:none;
 
 <body>
 
+<form method="GET" action="/form" style="max-width:700px;margin:auto;margin-bottom:20px;">
+    <input type="hidden" name="role" value="${role}">
+    <label>Enter Requisition Number to Load</label>
+    <input name="req" placeholder="Enter requisition number">
+    <button type="submit">Load COC</button>
+</form>
+
+<hr style="max-width:700px;margin:auto;margin-bottom:20px;">
 <div style="text-align:center;margin-bottom:25px;">
 <img src="/IC_Labs_Logo.png" style="width:180px;">
 <p style="margin-top:5px;font-size:14px;color:#555;">
@@ -149,14 +157,7 @@ Electronic Chain of Custody
 </p>
 </div>
 
-<form method="GET" action="/form">
-    <input type="hidden" name="role" value="${role}">
-    <label>Enter Requisition Number to Load</label>
-    <input name="req" placeholder="Enter requisition number">
-    <button type="submit">Load COC</button>
-</form>
 
-<hr>
 
 <form method="POST" action="/add">
 <input type="hidden" name="role" value="${role}">
@@ -197,13 +198,13 @@ Electronic Chain of Custody
 <input id="courierOther" name="courierOther" class="hidden" placeholder="Enter Courier">
 
 <label>Page Numbers</label>
-<input name="page_numbers"${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
+<input name="page_numbers" value="${data.page_numbers || ""}">
 
 <label>Requisition Number</label>
-<input name="requisition_number"${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
+<input name="requisition_number" value="${data.requisition_number || ""}">
 
 <label>PID</label>
-<input name="pid"${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
+<input name="pid" value="${data.pid || ""}">
 
 <label>Sample Type</label>
 <select name="sample_type" onchange="toggleOther(this,'sampleOther')"${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
@@ -247,10 +248,10 @@ Electronic Chain of Custody
 </div>
 
 <label>Visit Number</label>
-<input name="visit_number"${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
+<input name="visit_number" value="${data.visit_number || ""}">
 
 <label>Collection Date & Time</label>
-<input type="datetime-local" id="collectionTime" name="collection_datetime" oninput="checkTransitTime()"${isSite ? "disabled" : ""}${isLab ? "disabled" : ""}>
+<input type="datetime-local" name="receiving_datetime" value="${data.receiving_datetime || ""}">
 
 <label>Receiver</label>
 <select name="receiver" onchange="toggleOther(this,'receiverOther')"${isSite ? "disabled" : ""}${isDriver ? "disabled" : ""}>
@@ -265,7 +266,7 @@ Electronic Chain of Custody
 <input id="receiverOther" name="receiverOther" class="hidden" type="text" placeholder="Enter Receiver Name"${isSite ? "disabled" : ""}>
 
 <label>Receiving Date & Time</label>
-<input type="datetime-local" id="receivingTime" name="receiving_datetime" oninput="checkTransitTime()"${isSite ? "disabled" : ""}${isLab ? "disabled" : ""}>
+<input type="datetime-local" name="collection_datetime" value="${data.collection_datetime || ""}"> "disabled" : ""}>
 <div id="timeErrorMsg" style="font-size:13px;margin-top:3px;"></div>
 
 <label>Sample Status</label>
