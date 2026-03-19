@@ -241,7 +241,7 @@ Electronic Chain of Custody
 <input name="visit_number"${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
 
 <label>Collection Date & Time</label>
-<input type="datetime-local" id="collectionTime" name="collection_datetime" oninput="checkTransitTime()"${isSite ? "disabled" : ""}>
+<input type="datetime-local" id="collectionTime" name="collection_datetime" oninput="checkTransitTime()"${isSite ? "disabled" : ""}${isLab ? "disabled" : ""}>
 
 <label>Receiver</label>
 <select name="receiver" onchange="toggleOther(this,'receiverOther')"${isSite ? "disabled" : ""}${isDriver ? "disabled" : ""}>
