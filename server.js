@@ -66,19 +66,11 @@ return dt ? dt.replace("T"," ") : "";
 
 // ---------------- FORM ----------------
 
-function renderForm(role){
+function renderForm(role, data = {}){
 const isSite = role === "site";
 const isDriver = role === "driver";
 const isLab = role === "lab";
 
-<form method="GET" action="/form">
-    <input type="hidden" name="role" value="${role}">
-    <label>Enter Requisition Number to Load</label>
-    <input name="req" placeholder="Enter requisition number">
-    <button type="submit">Load COC</button>
-</form>
-
-<hr>
 return `
 <html>
 <head>
@@ -156,6 +148,15 @@ display:none;
 Electronic Chain of Custody
 </p>
 </div>
+
+<form method="GET" action="/form">
+    <input type="hidden" name="role" value="${role}">
+    <label>Enter Requisition Number to Load</label>
+    <input name="req" placeholder="Enter requisition number">
+    <button type="submit">Load COC</button>
+</form>
+
+<hr>
 
 <form method="POST" action="/add">
 <input type="hidden" name="role" value="${role}">
