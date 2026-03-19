@@ -266,7 +266,7 @@ Electronic Chain of Custody
 <input id="receiverOther" name="receiverOther" class="hidden" type="text" placeholder="Enter Receiver Name"${isSite ? "disabled" : ""}>
 
 <label>Receiving Date & Time</label>
-<input type="datetime-local" name="collection_datetime" value="${data.collection_datetime || ""}"> "disabled" : ""}>
+<input type="datetime-local" name="collection_datetime" value="${data.collection_datetime || ""}"${isSite ? "disabled" : ""}>
 <div id="timeErrorMsg" style="font-size:13px;margin-top:3px;"></div>
 
 <label>Sample Status</label>
