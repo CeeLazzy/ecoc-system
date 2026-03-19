@@ -71,6 +71,14 @@ const isSite = role === "site";
 const isDriver = role === "driver";
 const isLab = role === "lab";
 
+<form method="GET" action="/form">
+    <input type="hidden" name="role" value="${role}">
+    <label>Enter Requisition Number to Load</label>
+    <input name="req" placeholder="Enter requisition number">
+    <button type="submit">Load COC</button>
+</form>
+
+<hr>
 return `
 <html>
 <head>
@@ -502,13 +510,24 @@ app.post("/login", express.urlencoded({ extended: true }), (req, res) => {
 // GET form with role query
 app.get("/form", (req, res) => {
     const role = req.query.role;
+    const reqNum = req.query.req;
+
     if (!role || !["site","driver","lab"].includes(role)) {
         return res.redirect("/login");
     }
 
-    res.send(renderForm(role));
-});
+    // If requisition number provided → load existing COC
+    if (reqNum) {
+        db.get("SELECT * FROM samples WHERE requisition_number = ?", [reqNum], (err, row) => {
+            if (err) return res.send("DB Error");
+            if (!row) return res.send("No COC found for this requisition number");
 
+            res.send(renderForm(role, row));
+        });
+    } else {
+        res.send(renderForm(role));
+    }
+});
 // ---------------- ROUTES ----------------
 
 app.get("/", (req, res) => res.redirect("/login"));
@@ -535,6 +554,17 @@ app.get("/view-pdfs", (req, res) => {
 app.post("/add", async (req,res)=>{
 
 const d=req.body;
+
+// 🔽 ADD THIS BLOCK RIGHT HERE
+db.get("SELECT * FROM samples WHERE requisition_number = ?", [d.requisition_number], (err, existing) => {
+
+    if (err) return res.send("DB Error");
+
+    if (existing) {
+        d.id = existing.id; // force update if record exists
+    }
+
+    // 🔽 EVERYTHING BELOW MUST STAY INSIDE THIS BLOCK
 
 const protocol=d.protocol_name==="Other"?d.protocolOther:d.protocol_name;
 const site=d.site_name==="Other"?d.siteOther:d.site_name;
@@ -711,8 +741,9 @@ res.redirect("/");
 
 });
 
-});
+}); // closes db.get
 
+}); // ✅ THIS closes app.post("/add")
 if (!global.__portDeclared) {
     app.listen(PORT, () => console.log("Server running on port " + PORT));
     global.__portDeclared = true;
