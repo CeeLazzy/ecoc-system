@@ -66,8 +66,7 @@ return dt ? dt.replace("T"," ") : "";
 
 // ---------------- FORM ----------------
 
-function renderForm(role){
-const isSite = role === "site";
+function renderForm(role, data = {}){const isSite = role === "site";
 const isDriver = role === "driver";
 const isLab = role === "lab";
 
@@ -170,7 +169,7 @@ Electronic Chain of Custody
 <input id="siteOther" name="siteOther" class="hidden" placeholder="Enter Site">
 
 <label>Shipping Date</label>
-<input type="date" name="shipping_date" value="${todayDate()}"${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
+<input type="date" name="shipping_date" value="${data.shipping_date || todayDate()}"${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
 
 <label>Shipped By</label>
 <select name="shipped_by" onchange="toggleOther(this,'shipOther')"${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
@@ -191,10 +190,10 @@ Electronic Chain of Custody
 <input name="page_numbers"${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
 
 <label>Requisition Number</label>
-<input name="requisition_number"${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
+<input name="requisition_number" value="${data.requisition_number || ""}" ${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
 
 <label>PID</label>
-<input name="pid"${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
+<input name="pid" value="${data.pid || ""}" ${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
 
 <label>Sample Type</label>
 <select name="sample_type" onchange="toggleOther(this,'sampleOther')"${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
@@ -480,7 +479,10 @@ app.get("/login", (req, res) => {
           <option value="lab">Lab</option>
         </select><br>
         <label>Password:</label><br>
-        <input type="password" name="password"><br>
+<input type="password" name="password"><br>
+
+<label>Requisition Number:</label><br>
+<input type="text" name="requisition_number" required><br>
         <button type="submit">Enter</button>
       </form>
     </body>
@@ -490,10 +492,10 @@ app.get("/login", (req, res) => {
 
 // POST login form
 app.post("/login", express.urlencoded({ extended: true }), (req, res) => {
-    const { role, password } = req.body;
+    const { role, password, requisition_number } = req.body;
 
     if (users[role] && password === users[role]) {
-        res.redirect(`/form?role=${role}`);
+        res.redirect(`/form?role=${role}&req=${requisition_number}`);
     } else {
         res.send(`<h3>Invalid role or password. <a href='/login'>Try again</a></h3>`);
     }
@@ -502,11 +504,24 @@ app.post("/login", express.urlencoded({ extended: true }), (req, res) => {
 // GET form with role query
 app.get("/form", (req, res) => {
     const role = req.query.role;
+    const reqNum = req.query.req;
+
     if (!role || !["site","driver","lab"].includes(role)) {
         return res.redirect("/login");
     }
 
-    res.send(renderForm(role));
+    db.get(
+        "SELECT * FROM samples WHERE requisition_number = ?",
+        [reqNum],
+        (err, row) => {
+
+            if (err) return res.send("DB error");
+
+            // If record exists → load it
+            // If not → create empty with requisition number
+            res.send(renderForm(role, row || { requisition_number: reqNum }));
+        }
+    );
 });
 
 // ---------------- ROUTES ----------------
@@ -544,6 +559,63 @@ const sampleType=d.sample_type==="Other"?d.sampleOther:d.sample_type;
 const receiver=d.receiver==="Other"?d.receiverOther:d.receiver;
 const tempType=d.temp_type==="Other"?d.tempOther:d.temp_type;
 
+db.get(
+"SELECT id FROM samples WHERE requisition_number = ?",
+[d.requisition_number],
+async function(err, row){
+
+if(err) return res.send("DB Error");
+
+// ---------------- UPDATE ----------------
+if(row){
+
+db.run(`
+UPDATE samples SET
+protocol_name=?,
+site_name=?,
+shipping_date=?,
+shipped_by=?,
+courier_name=?,
+page_numbers=?,
+pid=?,
+sample_type=?,
+shipping_temp=?,
+delivery_temp=?,
+temp_type=?,
+sample_count_collected=?,
+sample_count_delivered=?,
+discrepancy_reason=?,
+visit_number=?,
+collection_datetime=?,
+receiver=?,
+receiving_datetime=?,
+sample_status=?
+WHERE requisition_number=?
+`,
+[
+protocol,site,d.shipping_date,shipper,courier,
+d.page_numbers,d.pid,sampleType,
+d.shipping_temp,d.delivery_temp,tempType,
+d.sample_count_collected,d.sample_count_delivered,d.discrepancy_reason,
+d.visit_number,d.collection_datetime,receiver,
+d.receiving_datetime,d.sample_status,
+d.requisition_number
+],
+async function(err){
+
+if(err) return res.send("Update error");
+
+// use existing ID
+generatePDF(row.id);
+res.redirect("/");
+
+});
+
+}
+
+// ---------------- INSERT ----------------
+else{
+
 db.run(`
 INSERT INTO samples (
 protocol_name,site_name,shipping_date,shipped_by,courier_name,
@@ -559,9 +631,21 @@ protocol,site,d.shipping_date,shipper,courier,
 d.page_numbers,d.requisition_number,d.pid,sampleType,
 d.shipping_temp,d.delivery_temp,tempType,
 d.sample_count_collected,d.sample_count_delivered,d.discrepancy_reason,
-d.visit_number,d.collection_datetime,d.receiver,d.receiving_datetime,d.sample_status
+d.visit_number,d.collection_datetime,receiver,d.receiving_datetime,d.sample_status
 ],
 async function(err){
+
+if(err) return res.send("Insert error");
+
+// new ID
+generatePDF(this.lastID);
+res.redirect("/");
+
+});
+
+}
+
+});
 
 if(err) return res.send("DB Error: "+err.message);
 
