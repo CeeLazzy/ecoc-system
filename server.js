@@ -499,30 +499,38 @@ app.post("/login", express.urlencoded({ extended: true }), (req, res) => {
     res.send(`<h3>Invalid role or password. <a href='/login'>Try again</a></h3>`);
 }
 }); 
-// ---------------- STEP 1: SEARCH PAGE ----------------
+// ---------------- STEP 1: SEARCH / NEW FORM PAGE ----------------
 app.get("/search", (req, res) => {
+    const role = req.query.role || 'site'; // default role if not provided
+
     res.send(`
     <html>
     <head>
-        <title>Find eCOC</title>
+        <title>eCOC Options</title>
         <style>
             body { font-family: Arial; padding: 50px; text-align: center; background:#f4f6f9; }
             input, select, button { padding: 10px; margin: 10px; width: 250px; }
             button { background:#2c3e50; color:white; border:none; border-radius:5px; cursor:pointer; }
+            hr { margin:30px 0; }
         </style>
     </head>
     <body>
-        <h2>Load Existing eCOC</h2>
+        <h2>eCOC Options</h2>
+
+        <!-- Load Existing eCOC -->
         <form method="GET" action="/load">
-            <label>Requisition Number</label><br>
-            <input name="reqnum" required><br>
-            <label>Select Role</label><br>
-            <select name="role">
-                <option value="site" ${req.query.role==='site'?'selected':''}>Site</option>
-                <option value="driver" ${req.query.role==='driver'?'selected':''}>Driver</option>
-                <option value="lab" ${req.query.role==='lab'?'selected':''}>Lab</option>
-            </select><br>
+            <label>Load Existing eCOC</label><br>
+            <input name="reqnum" placeholder="Enter Requisition Number"><br>
+            <input type="hidden" name="role" value="${role}">
             <button type="submit">Load Form</button>
+        </form>
+
+        <hr>
+
+        <!-- Start New eCOC -->
+        <form method="GET" action="/form">
+            <input type="hidden" name="role" value="${role}">
+            <button type="submit">Start New eCOC</button>
         </form>
     </body>
     </html>
