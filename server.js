@@ -171,7 +171,7 @@ Electronic Chain of Custody
 <input id="siteOther" name="siteOther" class="hidden" placeholder="Enter Site">
 
 <label>Shipping Date</label>
-<input type="date" name="shipping_date" value="${data.shipping_date || todayDate()}"
+<input type="date" name="shipping_date" value="${data.shipping_date || todayDate()}">
 
 <label>Shipped By</label>
 <select name="shipped_by" onchange="toggleOther(this,'shipOther')"${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
