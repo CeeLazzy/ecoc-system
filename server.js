@@ -66,7 +66,7 @@ return dt ? dt.replace("T"," ") : "";
 
 // ---------------- FORM ----------------
 
-function renderForm(role){
+function renderForm(role, data = {}){
 const isSite = role === "site";
 const isDriver = role === "driver";
 const isLab = role === "lab";
@@ -150,6 +150,7 @@ Electronic Chain of Custody
 </div>
 
 <form method="POST" action="/add">
+<input type="hidden" name="id" value="${data.id || ''}">
 <input type="hidden" name="role" value="${role}">
 
 <label>Protocol Name</label>
@@ -170,7 +171,7 @@ Electronic Chain of Custody
 <input id="siteOther" name="siteOther" class="hidden" placeholder="Enter Site">
 
 <label>Shipping Date</label>
-<input type="date" name="shipping_date" value="${todayDate()}"${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
+<input type="date" name="shipping_date" value="${data.shipping_date || todayDate()}"
 
 <label>Shipped By</label>
 <select name="shipped_by" onchange="toggleOther(this,'shipOther')"${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
@@ -188,13 +189,13 @@ Electronic Chain of Custody
 <input id="courierOther" name="courierOther" class="hidden" placeholder="Enter Courier">
 
 <label>Page Numbers</label>
-<input name="page_numbers"${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
+<input name="page_numbers" value="${data.page_numbers || ''}"${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
 
 <label>Requisition Number</label>
-<input name="requisition_number"${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
+<input name="requisition_number" value="${data.requisition_number || ''}"${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
 
 <label>PID</label>
-<input name="pid"${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
+<input name="pid" value="${data.pid || ''}"${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
 
 <label>Sample Type</label>
 <select name="sample_type" onchange="toggleOther(this,'sampleOther')"${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
@@ -508,6 +509,20 @@ app.get("/form", (req, res) => {
 
     res.send(renderForm(role));
 });
+app.get("/form/:id", (req, res) => {
+    const role = req.query.role;
+    const id = req.params.id;
+
+    if (!role || !["site","driver","lab"].includes(role)) {
+        return res.redirect("/login");
+    }
+
+    db.get("SELECT * FROM samples WHERE id = ?", [id], (err, row) => {
+        if (err || !row) return res.send("Record not found");
+
+        res.send(renderForm(role, row));
+    });
+});
 
 // ---------------- ROUTES ----------------
 
@@ -543,6 +558,35 @@ const courier=d.courier_name==="Other"?d.courierOther:d.courier_name;
 const sampleType=d.sample_type==="Other"?d.sampleOther:d.sample_type;
 const receiver=d.receiver==="Other"?d.receiverOther:d.receiver;
 const tempType=d.temp_type==="Other"?d.tempOther:d.temp_type;
+
+if (d.id) {
+// ✅ UPDATE EXISTING RECORD
+db.run(`
+UPDATE samples SET
+protocol_name=?, site_name=?, shipping_date=?, shipped_by=?, courier_name=?,
+page_numbers=?, requisition_number=?, pid=?, sample_type=?,
+shipping_temp=?, delivery_temp=?, temp_type=?,
+sample_count_collected=?, sample_count_delivered=?, discrepancy_reason=?,
+visit_number=?, collection_datetime=?, receiver=?, receiving_datetime=?, sample_status=?
+WHERE id=?
+`,
+[
+protocol, site, d.shipping_date, shipper, courier,
+d.page_numbers, d.requisition_number, d.pid, sampleType,
+d.shipping_temp, d.delivery_temp, tempType,
+d.sample_count_collected, d.sample_count_delivered, d.discrepancy_reason,
+d.visit_number, d.collection_datetime, receiver, d.receiving_datetime, d.sample_status,
+d.id
+],
+function(err){
+
+if(err) return res.send("Update Error: " + err.message);
+
+// 🔁 reload same form
+return res.redirect(`/form/${d.id}?role=${d.role}`);
+});
+
+} else {
 
 db.run(`
 INSERT INTO samples (
@@ -707,10 +751,10 @@ doc.fontSize(10)
 
 doc.end();
 
-res.redirect("/");
+res.redirect(`/form/${this.lastID}?role=${d.role}`);
 
 });
-
+}
 });
 
 if (!global.__portDeclared) {
