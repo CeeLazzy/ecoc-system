@@ -541,21 +541,32 @@ app.get("/load", (req, res) => {
 
     db.get("SELECT * FROM samples WHERE requisition_number = ?", [reqnum], (err, row) => {
         if (err) return res.send("DB Error: " + err.message);
-        if (!row) return res.send(`No record found for Requisition Number: ${reqnum}`);
 
-        // Redirect to the form with record ID
+        if (!row) {
+            // If no record exists, only allow Site to start a new form
+            if(role === 'site'){
+                return res.redirect(`/form?role=${role}&newReq=${reqnum}`);
+            } else {
+                return res.send(`No record found for Requisition Number: ${reqnum}`);
+            }
+        }
+
+        // Load form with existing data — any role can access
         res.redirect(`/form/${row.id}?role=${role}`);
     });
 });
-
 // GET form with role query
 app.get("/form", (req, res) => {
     const role = req.query.role;
+    const newReq = req.query.newReq;  // <-- added
+
     if (!role || !["site","driver","lab"].includes(role)) {
         return res.redirect("/login");
     }
 
-    res.send(renderForm(role));
+    // Pre-fill requisition_number if starting new
+    const data = newReq ? { requisition_number: newReq } : {};
+    res.send(renderForm(role, data));
 });
 app.get("/form/:id", (req, res) => {
     const role = req.query.role;
