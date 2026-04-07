@@ -661,6 +661,15 @@ if(err) return res.send("DB Error: "+err.message);
 
 // PDF CREATION
 
+  const temp = parseFloat(data.shipping_temp);
+  if (data.temp_type === "ambient") {
+    if (temp < 15) errors.shipping_temp = "Temp too low";
+    else if (temp > 25) errors.shipping_temp = "Temp too high";
+  } else if (data.temp_type === "refrigerated") {
+    if (temp < 2) errors.shipping_temp = "Temp too low";
+    else if (temp > 8) errors.shipping_temp = "Temp too high";
+  }
+
 const folderPath=path.join(__dirname,"eCOC IC Labs");
 
 if(!fs.existsSync(folderPath)) fs.mkdirSync(folderPath);
