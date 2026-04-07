@@ -493,11 +493,56 @@ app.get("/login", (req, res) => {
 app.post("/login", express.urlencoded({ extended: true }), (req, res) => {
     const { role, password } = req.body;
 
-    if (users[role] && password === users[role]) {
-        res.redirect(`/form?role=${role}`);
-    } else {
-        res.send(`<h3>Invalid role or password. <a href='/login'>Try again</a></h3>`);
+  if (users[role] && password === users[role]) {
+    res.redirect(`/search?role=${role}`); // <-- go to search page instead of form
+} else {
+    res.send(`<h3>Invalid role or password. <a href='/login'>Try again</a></h3>`);
+}
+
+// ---------------- STEP 1: SEARCH PAGE ----------------
+app.get("/search", (req, res) => {
+    res.send(`
+    <html>
+    <head>
+        <title>Find eCOC</title>
+        <style>
+            body { font-family: Arial; padding: 50px; text-align: center; background:#f4f6f9; }
+            input, select, button { padding: 10px; margin: 10px; width: 250px; }
+            button { background:#2c3e50; color:white; border:none; border-radius:5px; cursor:pointer; }
+        </style>
+    </head>
+    <body>
+        <h2>Load Existing eCOC</h2>
+        <form method="GET" action="/load">
+            <label>Requisition Number</label><br>
+            <input name="reqnum" required><br>
+            <label>Select Role</label><br>
+            <select name="role">
+                <option value="site" ${req.query.role==='site'?'selected':''}>Site</option>
+                <option value="driver" ${req.query.role==='driver'?'selected':''}>Driver</option>
+                <option value="lab" ${req.query.role==='lab'?'selected':''}>Lab</option>
+            </select><br>
+            <button type="submit">Load Form</button>
+        </form>
+    </body>
+    </html>
+    `);
+});
+// ---------------- STEP 2: LOAD FORM BY REQUISITION NUMBER ----------------
+app.get("/load", (req, res) => {
+    const { reqnum, role } = req.query;
+
+    if (!reqnum || !role || !["site","driver","lab"].includes(role)) {
+        return res.send("Invalid requisition number or role");
     }
+
+    db.get("SELECT * FROM samples WHERE requisition_number = ?", [reqnum], (err, row) => {
+        if (err) return res.send("DB Error: " + err.message);
+        if (!row) return res.send(`No record found for Requisition Number: ${reqnum}`);
+
+        // Redirect to the form with record ID
+        res.redirect(`/form/${row.id}?role=${role}`);
+    });
 });
 
 // GET form with role query
