@@ -498,7 +498,7 @@ app.post("/login", express.urlencoded({ extended: true }), (req, res) => {
 } else {
     res.send(`<h3>Invalid role or password. <a href='/login'>Try again</a></h3>`);
 }
-
+}); 
 // ---------------- STEP 1: SEARCH PAGE ----------------
 app.get("/search", (req, res) => {
     res.send(`
