@@ -697,20 +697,26 @@ WHERE id=?`;
     }
 
     else if (d.role === "driver") {
-        query = `
+query = `
 UPDATE samples SET
 courier_name=COALESCE(?, courier_name),
 shipping_temp=COALESCE(?, shipping_temp),
+delivery_temp=COALESCE(?, delivery_temp),
 temp_type=COALESCE(?, temp_type),
 sample_count_delivered=COALESCE(?, sample_count_delivered),
 discrepancy_reason=COALESCE(?, discrepancy_reason)
 WHERE id=?`;
 
         params = [
-            courier, d.shipping_temp, tempType,
-            d.sample_count_delivered, d.discrepancy_reason,
-            d.id
-        ];
+    courier,
+    d.shipping_temp,
+    d.delivery_temp,   // ✅ ADD THIS
+    tempType,
+    d.sample_count_delivered,
+    d.discrepancy_reason,
+    d.id
+];
+        
     }
 
     else if (d.role === "lab") {
