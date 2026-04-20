@@ -765,10 +765,10 @@ else {
 
         if(err) return res.send("DB Error: "+err.message);
 
-        // ✅ KEEP THIS INSIDE THE CALLBACK
+       const insertedId = this.lastID;
         db.get(
             "SELECT * FROM samples WHERE id = ?",
-            [this.lastID],
+               [insertedId], 
             async (err, row) => {
 
                 if (err) return res.send("Fetch Error: " + err.message);
@@ -918,7 +918,7 @@ doc.fontSize(10)
 
 doc.end();
 
-res.redirect(`/form/${this.lastID}?role=${d.role}`);
+res.redirect(`/form/${insertedId}?role=${d.role}`);
 
             } // closes db.get callback
         ); // closes db.get
