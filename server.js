@@ -680,7 +680,7 @@ if (d.id) {
     else if (d.role === "driver") {
         query = `
         UPDATE samples SET
-        courier_name=?, shipping_temp=?, temp_type=?,
+        courier_name=?, shipping_temp=?, temp_type=?,delivery_temp=?,
         sample_count_delivered=?, discrepancy_reason=?
         WHERE id=?`;
 
@@ -694,7 +694,7 @@ if (d.id) {
     else if (d.role === "lab") {
         query = `
         UPDATE samples SET
-        receiver=?, receiving_datetime=?, delivery_temp=?, sample_status=?
+        receiver=?, receiving_datetime=?, , sample_status=?
         WHERE id=?`;
 
         params = [
