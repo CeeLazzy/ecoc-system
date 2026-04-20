@@ -911,8 +911,10 @@ doc.fontSize(10)
 doc.end();
 
 res.redirect(`/form/${this.lastID}?role=${d.role}`);
-        }
-    );
+  }
+); // 👈 closes db.get
+}); // 👈 closes db.run
+}); // 👈 closes app.post
 
 if (!global.__portDeclared) {
     app.listen(PORT, () => console.log("Server running on port " + PORT));
