@@ -739,6 +739,7 @@ WHERE id=?`;
         return res.redirect(`/form/${d.id}?role=${d.role}`);
     });
 }
+}
 
 // ================= INSERT NEW =================
 else {
