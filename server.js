@@ -225,7 +225,7 @@ Electronic Chain of Custody
   name="shipping_temp"
   value="${data.shipping_temp || ''}"
   oninput="checkTemp()"
-  ${isDriver || isLab ? "readonly" : ""}
+  ${isSite || isLab ? "readonly" : ""}
 >
 <div id="shipTempMsg" style="font-size:13px;margin-top:3px;"></div>
 
