@@ -764,7 +764,7 @@ else {
    async function(err){
 
     if(err) return res.send("DB Error: "+err.message);
-
+}
     // 🔥 IMPORTANT: fetch latest DB values (NOT req.body)
     db.get(
         "SELECT * FROM samples WHERE id = ?",
