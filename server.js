@@ -25,7 +25,7 @@ const users = {
 // ---------------- DATABASE ----------------
 
 const db = new sqlite3.Database("./ecoc.db");
-
+console.log("Temps being saved:", d.shipping_temp, d.delivery_temp);
 db.serialize(() => {
 db.run(`
 CREATE TABLE IF NOT EXISTS samples (
@@ -836,8 +836,15 @@ addField("PID",d.pid);
 addField("Sample Type",sampleType);
 addField("Temperature Type",tempType);
 addField("Receiver",receiver);
-addField("Shipping Temperature", row.shipping_temp + " °C");
-addField("Delivery Temperature", row.delivery_temp + " °C");
+addField(
+  "Shipping Temperature",
+  row.shipping_temp != null ? row.shipping_temp + " °C" : "-"
+);
+
+addField(
+  "Delivery Temperature",
+  row.delivery_temp != null ? row.delivery_temp + " °C" : "-"
+);
 addField("Collection Date & Time", formatDateTime(row.collection_datetime));
 addField("Receiving Date & Time", formatDateTime(row.receiving_datetime));
 // TIME IN TRANSIT
