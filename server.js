@@ -913,7 +913,6 @@ doc.end();
 res.redirect(`/form/${this.lastID}?role=${d.role}`);
   }
 ); // 👈 closes db.get
-}); // 👈 closes db.run
 }); // 👈 closes app.post
 
 if (!global.__portDeclared) {
