@@ -156,7 +156,7 @@ Electronic Chain of Custody
 <input type="hidden" name="role" value="${role}">
 
 <label>Protocol Name</label>
-<select name="protocol_name" onchange="toggleOther(this,'protocolOther')" ${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
+<select name="protocol_name" onchange="toggleOther(this,'protocolOther')" ${isDriver ? "readonly" : ""}${isLab ? "readonly" : ""}>
   <option ${data.protocol_name==='Brilliant011'?'selected':''}>Brilliant011</option>
   <option ${data.protocol_name==='Transgender'?'selected':''}>Transgender</option>
   <option ${data.protocol_name==='Align'?'selected':''}>Align</option>
@@ -165,7 +165,7 @@ Electronic Chain of Custody
 <input id="protocolOther" name="protocolOther" class="hidden" placeholder="Enter Protocol" value="${data.protocol_name==='Other'?data.protocolOther:''}">
 
 <label>Site Name</label>
-<select name="site_name" onchange="toggleOther(this,'siteOther')" ${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
+<select name="site_name" onchange="toggleOther(this,'siteOther')" ${isDriver ? "readonly" : ""}${isLab ? "readonly" : ""}>
   <option ${data.site_name==='GSH J52'?'selected':''}>GSH J52</option>
   <option ${data.site_name==='Philippi Village'?'selected':''}>Philippi Village</option>
   <option ${data.site_name==='Other'?'selected':''}>Other</option>
@@ -175,7 +175,7 @@ Electronic Chain of Custody
 <input type="date" name="shipping_date" value="${data.shipping_date || todayDate()}">
 
 <label>Shipped By</label>
-<select name="shipped_by" onchange="toggleOther(this,'shipOther')" ${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
+<select name="shipped_by" onchange="toggleOther(this,'shipOther')" ${isDriver ? "readonly" : ""}${isLab ? "readonly" : ""}>
   <option ${data.shipped_by==='Dorothy'?'selected':''}>Dorothy</option>
   <option ${data.shipped_by==='Anele'?'selected':''}>Anele</option>
   <option ${data.shipped_by==='Other'?'selected':''}>Other</option>
@@ -183,23 +183,23 @@ Electronic Chain of Custody
 <input id="shipOther" name="shipOther" class="hidden" placeholder="Enter Name" value="${data.shipped_by==='Other'?data.shipOther:''}">
 
 <label>Courier Name</label>
-<select name="courier_name" onchange="toggleOther(this,'courierOther')" ${isSite ? "disabled" : ""}${isLab ? "disabled" : ""}>
+<select name="courier_name" onchange="toggleOther(this,'courierOther')" ${isSite ? "readonly" : ""}${isLab ? "readonly" : ""}>
   <option ${data.courier_name==='Rodon Global'?'selected':''}>Rodon Global</option>
   <option ${data.courier_name==='Other'?'selected':''}>Other</option>
 </select>
 <input id="courierOther" name="courierOther" class="hidden" placeholder="Enter Courier" value="${data.courier_name==='Other'?data.courierOther:''}">
 
 <label>Page Numbers</label>
-<input name="page_numbers" value="${data.page_numbers || ''}"${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
+<input name="page_numbers" value="${data.page_numbers || ''}"${isDriver ? "readonly" : ""}${isLab ? "readonly" : ""}>
 
 <label>Requisition Number</label>
-<input name="requisition_number" value="${data.requisition_number || ''}"${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
+<input name="requisition_number" value="${data.requisition_number || ''}"${isDriver ? "readonly" : ""}${isLab ? "readonly" : ""}>
 
 <label>PID</label>
-<input name="pid" value="${data.pid || ''}"${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
+<input name="pid" value="${data.pid || ''}"${isDriver ? "readonly" : ""}${isLab ? "readonly" : ""}>
 
 <label>Sample Type</label>
-<select name="sample_type" onchange="toggleOther(this,'sampleOther')" ${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
+<select name="sample_type" onchange="toggleOther(this,'sampleOther')" ${isDriver ? "readonly" : ""}${isLab ? "readonly" : ""}>
   <option ${data.sample_type==='Blood'?'selected':''}>Blood</option>
   <option ${data.sample_type==='Leukopak'?'selected':''}>Leukopak</option>
   <option ${data.sample_type==='Sputum'?'selected':''}>Sputum</option>
@@ -210,7 +210,7 @@ Electronic Chain of Custody
 
 
 <label>Temperature Type</label>
-<select name="temp_type" onchange="toggleOther(this,'tempOther');checkTemp();" ${isSite ? "disabled" : ""}${isLab ? "disabled" : ""}>
+<select name="temp_type" onchange="toggleOther(this,'tempOther');checkTemp();" ${isSite ? "readonly" : ""}${isLab ? "readonly" : ""}>
   <option ${data.temp_type==='Ambient'?'selected':''}>Ambient</option>
   <option ${data.temp_type==='Refrigerated'?'selected':''}>Refrigerated</option>
   <option ${data.temp_type==='Other'?'selected':''}>Other</option>
@@ -267,13 +267,13 @@ Electronic Chain of Custody
 </div>
 
 <label>Visit Number</label>
-<input name="visit_number" value="${data.visit_number || ''}" ${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
+<input name="visit_number" value="${data.visit_number || ''}" ${isDriver ? "readonly" : ""}${isLab ? "readonly" : ""}>
 
 <label>Collection Date & Time</label>
-<input id="collectionTime" type="datetime-local" name="collection_datetime" value="${data.collection_datetime || ''}" ${isSite ? "" : "disabled"}>
+<input id="collectionTime" type="datetime-local" name="collection_datetime" value="${data.collection_datetime || ''}" ${isSite ? "" : "readonly"}>
 
 <label>Receiver</label>
-<select name="receiver" onchange="toggleOther(this,'receiverOther')" ${isSite ? "disabled" : ""}${isDriver ? "disabled" : ""}>
+<select name="receiver" onchange="toggleOther(this,'receiverOther')" ${isSite ? "readonly" : ""}${isDriver ? "readonly" : ""}>
   <option ${data.receiver==='Natasha.G'?'selected':''}>Natasha.G</option>
   <option ${data.receiver==='Drew.M'?'selected':''}>Drew.M</option>
   <option ${data.receiver==='Lameez.P'?'selected':''}>Lameez.P</option>
@@ -284,10 +284,10 @@ Electronic Chain of Custody
 <input id="receiverOther" name="receiverOther" class="hidden" type="text" placeholder="Enter Receiver Name" value="${data.receiver==='Other'?data.receiverOther:''}">
 
 <label>Receiving Date & Time</label>
-<input id="receivingTime" type="datetime-local" name="receiving_datetime" value="${data.receiving_datetime || ''}" ${isSite ? "" : "disabled"}><div id="timeErrorMsg" style="font-size:13px;margin-top:3px;"></div>
+<input id="receivingTime" type="datetime-local" name="receiving_datetime" value="${data.receiving_datetime || ''}" ${isSite ? "" : "readonly"}><div id="timeErrorMsg" style="font-size:13px;margin-top:3px;"></div>
 
 <label>Sample Status</label>
-<select name="sample_status" ${isSite ? "disabled" : ""}${isDriver ? "disabled" : ""}>
+<select name="sample_status" ${isSite ? "readonly" : ""}${isDriver ? "readonly" : ""}>
   <option value="" ${!data.sample_status?'selected':''}>-- None Selected --</option>
   <option ${data.sample_status==='Testing'?'selected':''}>Testing</option>
   <option ${data.sample_status==='Storage'?'selected':''}>Storage</option>
@@ -471,6 +471,25 @@ if (!isNaN(c) && !isNaN(d) && c !== d) {
     discrepancyDiv.style.display = "none";
 }
 }
+function toggleOther(select, inputId) {
+    const input = document.getElementById(inputId);
+
+    if (!input) return;
+
+    if (select.value === "Other") {
+        input.classList.remove("hidden");
+    } else {
+        input.classList.add("hidden");
+        input.value = "";
+    }
+}
+window.onload = function () {
+    document.querySelectorAll("select").forEach(sel => {
+        if (sel.value === "Other") {
+            toggleOther(sel, sel.getAttribute("onchange").split("'")[1]);
+        }
+    });
+};
 
 </script>
 
@@ -663,11 +682,11 @@ if (d.id) {
 
     if (d.role === "site") {
         query = `
-        UPDATE samples SET
-        protocol_name=?, site_name=?, shipping_date=?, shipped_by=?,
-        page_numbers=?, requisition_number=?, pid=?, sample_type=?,
-        sample_count_collected=?, visit_number=?, collection_datetime=?
-        WHERE id=?`;
+UPDATE samples SET
+protocol_name=?, site_name=?, shipping_date=?, shipped_by=?,
+page_numbers=?, requisition_number=?, pid=?, sample_type=?,
+sample_count_collected=?, visit_number=?, collection_datetime=?
+WHERE id=?`;
 
         params = [
             protocol, site, d.shipping_date, shipper,
@@ -679,10 +698,13 @@ if (d.id) {
 
     else if (d.role === "driver") {
         query = `
-        UPDATE samples SET
-        courier_name=?, shipping_temp=?, temp_type=?,delivery_temp=?,
-        sample_count_delivered=?, discrepancy_reason=?
-        WHERE id=?`;
+UPDATE samples SET
+courier_name=COALESCE(?, courier_name),
+shipping_temp=COALESCE(?, shipping_temp),
+temp_type=COALESCE(?, temp_type),
+sample_count_delivered=COALESCE(?, sample_count_delivered),
+discrepancy_reason=COALESCE(?, discrepancy_reason)
+WHERE id=?`;
 
         params = [
             courier, d.shipping_temp, tempType,
@@ -693,9 +715,12 @@ if (d.id) {
 
     else if (d.role === "lab") {
         query = `
-        UPDATE samples SET
-        receiver=?, receiving_datetime=?, , sample_status=?
-        WHERE id=?`;
+UPDATE samples SET
+receiver=?,
+receiving_datetime=?,
+delivery_temp=?,
+sample_status=?
+WHERE id=?`;
 
         params = [
             receiver, d.receiving_datetime, d.delivery_temp, d.sample_status,
