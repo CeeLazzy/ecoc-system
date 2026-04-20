@@ -911,19 +911,20 @@ doc.fontSize(10)
 
 doc.end();
 
-doc.end();
-
 res.redirect(`/form/${this.lastID}?role=${d.role}`);
 
-        } // closes db.get callback
-    ); // closes db.get
+            } // closes db.get callback
+        ); // closes db.get
 
     } // closes db.run callback
 ); // closes db.run
 
 } // closes else
 
-// ✅ SERVER START (OUTSIDE EVERYTHING)
+}); // ✅ THIS WAS MISSING (closes app.post)
+
+
+// ✅ SERVER START
 if (!global.__portDeclared) {
     app.listen(PORT, () => console.log("Server running on port " + PORT));
     global.__portDeclared = true;
