@@ -84,12 +84,12 @@ return `
 background-color:#fdeaea;
 border:2px solid #e74c3c;
 }
-temp-valid{
+.temp-valid{
 background-color:#e8f8e8;
 border:2px solid #2ecc71;
 }
 
-temp-invalid{
+.temp-invalid{
 background-color:#fdeaea;
 border:2px solid #e74c3c;
 }
@@ -434,12 +434,12 @@ function validate(temp, field, msg) {
     }
 
     if (temp < min) {
-        msg.innerHTML = `BELOW range (${min}-${max}°C)`;
+        msg.innerHTML = "BELOW range (" + min + "-" + max + "°C)";
         msg.style.color = "red";
         field.classList.add("temp-invalid");
     }
     else if (temp > max) {
-        msg.innerHTML = `ABOVE range (${min}-${max}°C)`;
+        msg.innerHTML = "ABOVE range (" + min + "-" + max + "°C)";
         msg.style.color = "red";
         field.classList.add("temp-invalid");
     }
