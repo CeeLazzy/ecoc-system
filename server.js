@@ -227,7 +227,7 @@ Electronic Chain of Custody
   oninput="checkTemp()"
   ${isDriver || isLab ? "readonly" : ""}
 >
-id="shipTempMsg" style="font-size:13px;margin-top:3px;"></div>
+<div id="shipTempMsg" style="font-size:13px;margin-top:3px;"></div>
 
 <label>Delivery Temperature</label>
 <input
@@ -434,12 +434,12 @@ function validate(temp, field, msg) {
     }
 
     if (temp < min) {
-        msg.innerHTML = "⚠ BELOW range (${min}-${max}°C)";
+        msg.innerHTML = `⚠ BELOW range (${min}-${max}°C)`;
         msg.style.color = "red";
         field.classList.add("temp-invalid");
     }
     else if (temp > max) {
-        msg.innerHTML = "⚠ ABOVE range (${min}-${max}°C)";
+        msg.innerHTML = `⚠ ABOVE range (${min}-${max}°C)`;
         msg.style.color = "red";
         field.classList.add("temp-invalid");
     }
