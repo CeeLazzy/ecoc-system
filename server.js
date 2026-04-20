@@ -761,29 +761,29 @@ else {
         d.sample_count_collected,d.sample_count_delivered,d.discrepancy_reason,
         d.visit_number,d.collection_datetime,receiver,d.receiving_datetime,d.sample_status
     ],
-   async function(err){
+    async function(err){
 
-    if(err) return res.send("DB Error: "+err.message);
+        if(err) return res.send("DB Error: "+err.message);
 
-    // 🔥 IMPORTANT: fetch latest DB values (NOT req.body)
-    db.get(
-        "SELECT * FROM samples WHERE id = ?",
-        [this.lastID],
-        async (err, row) => {
+        // ✅ KEEP THIS INSIDE THE CALLBACK
+        db.get(
+            "SELECT * FROM samples WHERE id = ?",
+            [this.lastID],
+            async (err, row) => {
 
+                if (err) return res.send("Fetch Error: " + err.message);
 
+                const folderPath = path.join(__dirname,"eCOC IC Labs");
 
-const folderPath=path.join(__dirname,"eCOC IC Labs");
+                if(!fs.existsSync(folderPath)) fs.mkdirSync(folderPath);
 
-if(!fs.existsSync(folderPath)) fs.mkdirSync(folderPath);
+                const year = new Date().getFullYear();
+                const docRefNum = `IC-${year}-${String(this.lastID).padStart(4,'0')}`;
 
-const year=new Date().getFullYear();
-const docRefNum=`IC-${year}-${String(this.lastID).padStart(4,'0')}`;
+                const doc = new PDFDocument({margin:50});
+                const filePath = path.join(folderPath,`eCOC_${this.lastID}.pdf`);
 
-const doc=new PDFDocument({margin:50});
-const filePath=path.join(folderPath,`eCOC_${this.lastID}.pdf`);
-
-doc.pipe(fs.createWriteStream(filePath));
+                doc.pipe(fs.createWriteStream(filePath));
 
 const leftMargin=50;
 const tableLabelWidth=160;
@@ -911,12 +911,14 @@ doc.fontSize(10)
 
 doc.end();
 
-res.redirect(`/form/${this.lastID}?role=${d.role}`);
-     }
-            );
-        }
-    );
-}
+rres.redirect(`/form/${this.lastID}?role=${d.role}`);
+            }
+        ); // closes db.get
+
+    } // closes db.run callback
+); // closes db.run
+
+} // closes else
 
 if (!global.__portDeclared) {
     app.listen(PORT, () => console.log("Server running on port " + PORT));
