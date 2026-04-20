@@ -54,6 +54,8 @@ sample_status TEXT
 `);
 });
 
+db.run("CREATE UNIQUE INDEX IF NOT EXISTS idx_reqnum ON samples(requisition_number)");
+
 // ---------------- HELPERS ----------------
 
 function todayDate(){
@@ -238,7 +240,7 @@ Electronic Chain of Custody
 <input name="visit_number" value="${data.visit_number || ''}" ${isDriver ? "disabled" : ""}${isLab ? "disabled" : ""}>
 
 <label>Collection Date & Time</label>
-<input type="datetime-local" name="collection_datetime" value="${data.collection_datetime || ''}" ${isSite ? "" : "disabled"}>
+<input id="collectionTime" type="datetime-local" name="collection_datetime" value="${data.collection_datetime || ''}" ${isSite ? "" : "disabled"}>
 
 <label>Receiver</label>
 <select name="receiver" onchange="toggleOther(this,'receiverOther')" ${isSite ? "disabled" : ""}${isDriver ? "disabled" : ""}>
@@ -252,8 +254,7 @@ Electronic Chain of Custody
 <input id="receiverOther" name="receiverOther" class="hidden" type="text" placeholder="Enter Receiver Name" value="${data.receiver==='Other'?data.receiverOther:''}">
 
 <label>Receiving Date & Time</label>
-<input type="datetime-local" name="receiving_datetime" value="${data.receiving_datetime || ''}" ${isSite ? "" : "disabled"}>
-<div id="timeErrorMsg" style="font-size:13px;margin-top:3px;"></div>
+<input id="receivingTime" type="datetime-local" name="receiving_datetime" value="${data.receiving_datetime || ''}" ${isSite ? "" : "disabled"}><div id="timeErrorMsg" style="font-size:13px;margin-top:3px;"></div>
 
 <label>Sample Status</label>
 <select name="sample_status" ${isSite ? "disabled" : ""}${isDriver ? "disabled" : ""}>
@@ -619,35 +620,65 @@ const receiver=d.receiver==="Other"?d.receiverOther:d.receiver;
 const tempType=d.temp_type==="Other"?d.tempOther:d.temp_type;
 
 if (d.id) {
-// ✅ UPDATE EXISTING RECORD
-db.run(`
-UPDATE samples SET
-protocol_name=?, site_name=?, shipping_date=?, shipped_by=?, courier_name=?,
-page_numbers=?, requisition_number=?, pid=?, sample_type=?,
-shipping_temp=?, delivery_temp=?, temp_type=?,
-sample_count_collected=?, sample_count_delivered=?, discrepancy_reason=?,
-visit_number=?, collection_datetime=?, receiver=?, receiving_datetime=?, sample_status=?
-WHERE id=?
-`,
-[
-protocol, site, d.shipping_date, shipper, courier,
-d.page_numbers, d.requisition_number, d.pid, sampleType,
-d.shipping_temp, d.delivery_temp, tempType,
-d.sample_count_collected, d.sample_count_delivered, d.discrepancy_reason,
-d.visit_number, d.collection_datetime, receiver, d.receiving_datetime, d.sample_status,
-d.id
-],
-function(err){
 
-if(err) return res.send("Update Error: " + err.message);
+    let query = "";
+    let params = [];
 
-// 🔁 reload same form
-return res.redirect(`/form/${d.id}?role=${d.role}`);
-});
+    // 🟦 SITE
+    if (d.role === "site") {
+        query = `
+        UPDATE samples SET
+        protocol_name=?, site_name=?, shipping_date=?, shipped_by=?,
+        page_numbers=?, requisition_number=?, pid=?, sample_type=?,
+        sample_count_collected=?, visit_number=?, collection_datetime=?
+        WHERE id=?`;
+
+        params = [
+            protocol, site, d.shipping_date, shipper,
+            d.page_numbers, d.requisition_number, d.pid, sampleType,
+            d.sample_count_collected, d.visit_number, d.collection_datetime,
+            d.id
+        ];
+    }
+
+    // 🟨 DRIVER
+    else if (d.role === "driver") {
+        query = `
+        UPDATE samples SET
+        courier_name=?, shipping_temp=?, temp_type=?,
+        sample_count_delivered=?, discrepancy_reason=?
+        WHERE id=?`;
+
+        params = [
+            courier, d.shipping_temp, tempType,
+            d.sample_count_delivered, d.discrepancy_reason,
+            d.id
+        ];
+    }
+
+    // 🟩 LAB
+    else if (d.role === "lab") {
+        query = `
+        UPDATE samples SET
+        receiver=?, receiving_datetime=?, delivery_temp=?, sample_status=?
+        WHERE id=?`;
+
+        params = [
+            receiver, d.receiving_datetime, d.delivery_temp, d.sample_status,
+            d.id
+        ];
+    }
+
+    return db.run(query, params, function(err){
+        if(err) return res.send("Update Error: " + err.message);
+
+        return res.redirect(`/form/${d.id}?role=${d.role}`);
+    });
+}
 
 } else {
 
-db.run(`
+return db.run(`
 INSERT INTO samples (
 protocol_name,site_name,shipping_date,shipped_by,courier_name,
 page_numbers,requisition_number,pid,sample_type,
@@ -662,7 +693,7 @@ protocol,site,d.shipping_date,shipper,courier,
 d.page_numbers,d.requisition_number,d.pid,sampleType,
 d.shipping_temp,d.delivery_temp,tempType,
 d.sample_count_collected,d.sample_count_delivered,d.discrepancy_reason,
-d.visit_number,d.collection_datetime,d.receiver,d.receiving_datetime,d.sample_status
+d.visit_number,d.collection_datetime,receiver,d.receiving_datetime,d.sample_status
 ],
 async function(err){
 
