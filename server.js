@@ -696,16 +696,6 @@ else {
     async function(err){
 
         if(err) return res.send("DB Error: "+err.message);
-
-        // keep your PDF logic EXACTLY as is below this...
-
-        res.redirect(`/form/${this.lastID}?role=${d.role}`);
-    });
-}
-
-});
-
-
 // PDF CREATION
 
 
@@ -850,8 +840,6 @@ doc.end();
 
 res.redirect(`/form/${this.lastID}?role=${d.role}`);
 
-});
-}
 });
 
 if (!global.__portDeclared) {
