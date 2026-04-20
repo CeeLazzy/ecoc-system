@@ -760,10 +760,15 @@ else {
         d.sample_count_collected,d.sample_count_delivered,d.discrepancy_reason,
         d.visit_number,d.collection_datetime,receiver,d.receiving_datetime,d.sample_status
     ],
-    async function(err){
+   async function(err){
 
-        if(err) return res.send("DB Error: "+err.message);
-// PDF CREATION
+    if(err) return res.send("DB Error: "+err.message);
+
+    // 🔥 IMPORTANT: fetch latest DB values (NOT req.body)
+    db.get(
+        "SELECT * FROM samples WHERE id = ?",
+        [this.lastID],
+        async (err, row) => {
 
 
 
@@ -829,11 +834,11 @@ addField("Requisition Number",d.requisition_number);
 addField("PID",d.pid);
 addField("Sample Type",sampleType);
 addField("Temperature Type",tempType);
-addField("Shipping Temperature",d.shipping_temp+" °C");
-addField("Delivery Temperature",d.delivery_temp+" °C");
-addField("Collection Date & Time",formatDateTime(d.collection_datetime));
 addField("Receiver",receiver);
-addField("Receiving Date & Time",formatDateTime(d.receiving_datetime));
+addField("Shipping Temperature", row.shipping_temp + " °C");
+addField("Delivery Temperature", row.delivery_temp + " °C");
+addField("Collection Date & Time", formatDateTime(row.collection_datetime));
+addField("Receiving Date & Time", formatDateTime(row.receiving_datetime));
 // TIME IN TRANSIT
 
 if(d.collection_datetime && d.receiving_datetime){
@@ -906,12 +911,8 @@ doc.fontSize(10)
 doc.end();
 
 res.redirect(`/form/${this.lastID}?role=${d.role}`);
-
-   }
+        }
     );
-
-  } // ✅ closes ELSE block
-}); // ✅ 
 
 if (!global.__portDeclared) {
     app.listen(PORT, () => console.log("Server running on port " + PORT));
