@@ -25,7 +25,7 @@ const users = {
 // ---------------- DATABASE ----------------
 
 const db = new sqlite3.Database("./ecoc.db");
-console.log("Temps being saved:", d.shipping_temp, d.delivery_temp);
+
 db.serialize(() => {
 db.run(`
 CREATE TABLE IF NOT EXISTS samples (
@@ -665,7 +665,7 @@ app.get("/download/:id", (req, res) => {
 app.post("/add", async (req,res)=>{
 
 const d=req.body;
-
+console.log("Temps being saved:", d.shipping_temp, d.delivery_temp);
 const protocol=d.protocol_name==="Other"?d.protocolOther:d.protocol_name;
 const site=d.site_name==="Other"?d.siteOther:d.site_name;
 const shipper=d.shipped_by==="Other"?d.shipOther:d.shipped_by;
