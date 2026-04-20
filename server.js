@@ -218,17 +218,47 @@ Electronic Chain of Custody
 <input id="tempOther" name="tempOther" class="hidden" type="text" placeholder="Enter Temperature Type" value="${data.temp_type==='Other'?data.tempOther:''}">
 
 <label>Shipping Temperature</label>
-<input type="number" step="0.1" name="shipping_temp" value="${data.shipping_temp || ''}" ${isSite ? "disabled" : ""}${isLab ? "disabled" : ""}><div id="shipTempMsg" style="font-size:13px;margin-top:3px;"></div>
+<input
+  id="shipTemp"
+  type="number"
+  step="0.1"
+  name="shipping_temp"
+  value="${data.shipping_temp || ''}"
+  oninput="checkTemp()"
+  ${isDriver || isLab ? "readonly" : ""}
+>
+id="shipTempMsg" style="font-size:13px;margin-top:3px;"></div>
 
 <label>Delivery Temperature</label>
-<input type="number" step="0.1" name="delivery_temp" value="${data.delivery_temp || ''}" ${isSite ? "disabled" : ""}${isLab ? "disabled" : ""}>
+<input
+  id="delTemp"
+  type="number"
+  step="0.1"
+  name="delivery_temp"
+  value="${data.delivery_temp || ''}"
+  oninput="checkTemp()"
+  ${isSite || isLab ? "readonly" : ""}
+>
 <div id="delTempMsg" style="font-size:13px;margin-top:3px;"></div>
 
 <label>Tube Count Collected</label>
-<input type="number" name="sample_count_collected" value="${data.sample_count_collected || ''}" ${isSite ? "disabled" : ""}${isLab ? "disabled" : ""}>
-
+<input 
+  id="collected"
+  type="number"
+  name="sample_count_collected"
+  value="${data.sample_count_collected || ''}"
+  ${isSite || isLab ? "readonly" : ""}
+  oninput="checkTubes()"
+>
 <label>Tube Count Delivered</label>
-<input type="number" name="sample_count_delivered" value="${data.sample_count_delivered || ''}" ${isSite ? "disabled" : ""}${isLab ? "disabled" : ""}>
+<input 
+  id="delivered"
+  type="number"
+  name="sample_count_delivered"
+  value="${data.sample_count_delivered || ''}"
+  ${isSite || isLab ? "readonly" : ""}
+  oninput="checkTubes()"
+>
 <div id="discrepancyDiv" class="hidden">
 
 <label>Tube Discrepancy Reason</label>
@@ -266,6 +296,22 @@ Electronic Chain of Custody
 
 <button type="submit">Generate eCOC</button>
 
+${data.id ? `
+<div style="margin-top:10px;">
+    <a href="/download/${data.id}" style="
+        display:block;
+        text-align:center;
+        padding:10px;
+        background:#27ae60;
+        color:white;
+        border-radius:5px;
+        text-decoration:none;
+        margin-top:10px;
+    ">
+        Download PDF
+    </a>
+</div>
+` : ""}
 <div id="statusBar" style="
   margin-top:20px;
   padding:10px;
@@ -353,99 +399,77 @@ msg.style.color="green";
 }
 
 }
-function checkTemp(){
+function checkTemp() {
 
 const type = document.querySelector('[name="temp_type"]').value;
-if(type === "Other"){
-
-document.getElementById("shipTempMsg").innerHTML="";
-document.getElementById("delTempMsg").innerHTML="";
-
-document.getElementById("shipTemp").classList.remove("temp-valid","temp-invalid");
-document.getElementById("delTemp").classList.remove("temp-valid","temp-invalid");
-
-return;
-
-}
 
 const shipField = document.getElementById("shipTemp");
 const delField = document.getElementById("delTemp");
 
-const shipTemp = parseFloat(shipField.value);
-const delTemp = parseFloat(delField.value);
-
 const shipMsg = document.getElementById("shipTempMsg");
 const delMsg = document.getElementById("delTempMsg");
 
-function validate(temp, field, msg){
+if (!shipField || !delField) return;
 
-field.classList.remove("temp-valid","temp-invalid");
+const shipTemp = parseFloat(shipField.value);
+const delTemp = parseFloat(delField.value);
 
-if(isNaN(temp)){
-msg.innerHTML="";
-return;
-}
+function validate(temp, field, msg) {
 
-let min,max;
+    field.classList.remove("temp-valid", "temp-invalid");
 
-if(type==="Ambient"){
-min=15;
-max=25;
-}
+    if (isNaN(temp)) {
+        msg.innerHTML = "";
+        return;
+    }
 
-if(type==="Refrigerated"){
-min=2;
-max=8;
-}
+    let min = 0, max = 0;
 
-if(temp < min){
-msg.innerHTML="⚠ Temperature BELOW range ("+min+"-"+max+"°C)";
-msg.style.color="red";
-field.classList.add("temp-invalid");
-}
+    if (type === "Ambient") {
+        min = 15; max = 25;
+    }
 
-else if(temp > max){
-msg.innerHTML="⚠ Temperature ABOVE range ("+min+"-"+max+"°C)";
-msg.style.color="red";
-field.classList.add("temp-invalid");
-}
+    if (type === "Refrigerated") {
+        min = 2; max = 8;
+    }
 
-else{
-msg.innerHTML="✓ Temperature within range";
-msg.style.color="green";
-field.classList.add("temp-valid");
-}
-
+    if (temp < min) {
+        msg.innerHTML = `⚠ BELOW range (${min}-${max}°C)`;
+        msg.style.color = "red";
+        field.classList.add("temp-invalid");
+    }
+    else if (temp > max) {
+        msg.innerHTML = `⚠ ABOVE range (${min}-${max}°C)`;
+        msg.style.color = "red";
+        field.classList.add("temp-invalid");
+    }
+    else {
+        msg.innerHTML = "✓ Within range";
+        msg.style.color = "green";
+        field.classList.add("temp-valid");
+    }
 }
 
 validate(shipTemp, shipField, shipMsg);
 validate(delTemp, delField, delMsg);
-
 }
 
-function toggleOther(select, input) {
-  const field = document.getElementById(input);
+function checkTubes() {
 
-  if (select.value === "Other") {
-    field.style.display = "block";
-    field.focus();
-  } else {
-    field.style.display = "none";
-    field.value = "";
-  }
+const collected = document.getElementById("collected");
+const delivered = document.getElementById("delivered");
+const discrepancyDiv = document.getElementById("discrepancyDiv");
+
+if (!collected || !delivered) return;
+
+const c = parseInt(collected.value);
+const d = parseInt(delivered.value);
+
+if (!isNaN(c) && !isNaN(d) && c !== d) {
+    discrepancyDiv.style.display = "block";
+} else {
+    discrepancyDiv.style.display = "none";
 }
-
-function checkTubes(){
-
-var c=document.getElementById("collected").value;
-var d=document.getElementById("delivered").value;
-
-if(c && d && c!==d){
-document.getElementById("discrepancyDiv").style.display="block";
-}else{
-document.getElementById("discrepancyDiv").style.display="none";
-}
-
 }
 
 </script>
@@ -605,6 +629,18 @@ app.get("/view-pdfs", (req, res) => {
 
     res.send(html);
   });
+});
+app.get("/download/:id", (req, res) => {
+
+    const id = req.params.id;
+
+    const filePath = path.join(__dirname, "eCOC IC Labs", `eCOC_${id}.pdf`);
+
+    if (fs.existsSync(filePath)) {
+        return res.download(filePath, `eCOC_${id}.pdf`);
+    } else {
+        return res.send("PDF not found.");
+    }
 });
 
 app.post("/add", async (req,res)=>{
