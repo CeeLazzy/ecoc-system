@@ -120,11 +120,11 @@ function renderOptions(options, currentValue) {
     }).join("");
 }
 
-function renderSiteOptions(currentValue) {
+function renderSiteOptions(currentValue, canEdit) {
     return siteOptions.map(site => {
         return `
             <label class="choice-line">
-                <input type="radio" name="site_name" value="${escapeHtml(site)}" ${checked(currentValue, site)}>
+                <input type="radio" name="site_name" value="${escapeHtml(site)}" ${checked(currentValue, site)} ${disabled(canEdit)}>
                 <span>${escapeHtml(site)}</span>
             </label>
         `;
@@ -135,10 +135,9 @@ function renderSampleRows(role, rows) {
     const isSite = role === "site";
     const isDriver = role === "driver";
     const isLab = role === "lab";
-
     const usableRows = rows.length ? rows : [{}];
 
-    return usableRows.map((row, index) => {
+    return usableRows.map(row => {
         return `
             <tr class="sample-row">
                 <td>
@@ -148,41 +147,15 @@ function renderSampleRows(role, rows) {
                     ${!isSite ? `<input type="hidden" name="sample_type[]" value="${escapeHtml(row.sample_type || "")}">` : ""}
                 </td>
 
-                <td>
-                    <input type="number" step="0.1" name="shipping_temp[]" value="${escapeHtml(row.shipping_temp)}" ${readonly(isSite)}>
-                </td>
-
-                <td>
-                    <input type="number" name="tubes_sent[]" value="${escapeHtml(row.tubes_sent)}" ${readonly(isSite)}>
-                </td>
-
-                <td>
-                    <input type="datetime-local" name="sample_collection_datetime[]" value="${escapeHtml(row.sample_collection_datetime)}" ${readonly(isSite)}>
-                </td>
-
-                <td>
-                    <input name="visit[]" value="${escapeHtml(row.visit)}" ${readonly(isSite)}>
-                </td>
-
-                <td>
-                    <input type="number" step="0.1" name="courier_pickup_temp[]" value="${escapeHtml(row.courier_pickup_temp)}" ${readonly(isDriver)}>
-                </td>
-
-                <td>
-                    <input type="number" name="tubes_received[]" value="${escapeHtml(row.tubes_received)}" ${readonly(isLab)}>
-                </td>
-
-                <td>
-                    <input name="receiver_initial_date[]" value="${escapeHtml(row.receiver_initial_date)}" ${readonly(isLab)} placeholder="Initials and date">
-                </td>
-
-                <td>
-                    <input name="comments[]" value="${escapeHtml(row.comments)}" ${readonly(isLab)}>
-                </td>
-
-                <td>
-                    <input type="number" step="0.1" name="delivery_temp[]" value="${escapeHtml(row.delivery_temp)}" ${readonly(isLab)}>
-                </td>
+                <td><input type="number" step="0.1" name="shipping_temp[]" value="${escapeHtml(row.shipping_temp)}" ${readonly(isSite)}></td>
+                <td><input type="number" name="tubes_sent[]" value="${escapeHtml(row.tubes_sent)}" ${readonly(isSite)}></td>
+                <td><input type="datetime-local" name="sample_collection_datetime[]" value="${escapeHtml(row.sample_collection_datetime)}" ${readonly(isSite)}></td>
+                <td><input name="visit[]" value="${escapeHtml(row.visit)}" ${readonly(isSite)}></td>
+                <td><input type="number" step="0.1" name="courier_pickup_temp[]" value="${escapeHtml(row.courier_pickup_temp)}" ${readonly(isDriver)}></td>
+                <td><input type="number" name="tubes_received[]" value="${escapeHtml(row.tubes_received)}" ${readonly(isLab)}></td>
+                <td><input name="receiver_initial_date[]" value="${escapeHtml(row.receiver_initial_date)}" ${readonly(isLab)}></td>
+                <td><input name="comments[]" value="${escapeHtml(row.comments)}" ${readonly(isLab)}></td>
+                <td><input type="number" step="0.1" name="delivery_temp[]" value="${escapeHtml(row.delivery_temp)}" ${readonly(isLab)}></td>
 
                 ${isSite ? `
                     <td class="action-cell">
@@ -197,7 +170,6 @@ function renderSampleRows(role, rows) {
 function renderForm(role, form = {}, rows = []) {
     const isSite = role === "site";
     const isDriver = role === "driver";
-    const isLab = role === "lab";
 
     const protocolIsOther = form.protocol_name && !protocolOptions.includes(form.protocol_name);
     const siteIsOther = form.site_name && !siteOptions.includes(form.site_name);
@@ -211,77 +183,80 @@ function renderForm(role, form = {}, rows = []) {
 body{
     font-family:Arial, sans-serif;
     margin:0;
-    padding:24px;
-    background:#f4f6f9;
+    padding:10px;
+    background:#dfe4ea;
     color:#1f2933;
 }
 
 .form-shell{
-    max-width:1400px;
+    width:1120px;
+    min-height:790px;
     margin:auto;
     background:white;
-    padding:24px;
-    border-radius:8px;
-    box-shadow:0 4px 10px rgba(0,0,0,0.1);
+    padding:16px;
+    border-radius:0;
+    box-shadow:0 4px 10px rgba(0,0,0,0.12);
+    box-sizing:border-box;
 }
 
 .header{
     display:grid;
-    grid-template-columns:260px 1fr 360px;
+    grid-template-columns:220px 1fr 300px;
     align-items:start;
-    gap:20px;
-    margin-bottom:20px;
+    gap:12px;
+    margin-bottom:10px;
 }
 
 .logo{
-    width:170px;
+    width:135px;
 }
 
 .title{
     text-align:center;
-    font-size:24px;
+    font-size:20px;
     font-weight:bold;
-    padding-top:22px;
+    padding-top:18px;
 }
 
 .contact{
-    font-size:13px;
-    line-height:1.4;
+    font-size:11px;
+    line-height:1.3;
     text-align:right;
 }
 
 table{
     width:100%;
     border-collapse:collapse;
-    margin-top:16px;
+    margin-top:8px;
+    table-layout:fixed;
 }
 
 th,td{
     border:1px solid #9aa6b2;
-    padding:8px;
+    padding:4px;
     vertical-align:top;
 }
 
 th{
     background:#e8eef5;
-    font-size:13px;
-    text-align:left;
+    font-size:10px;
+    text-align:center;
 }
 
 label{
     font-weight:bold;
     display:block;
-    margin-bottom:5px;
-    font-size:13px;
+    margin-bottom:3px;
+    font-size:11px;
 }
 
 input,select,textarea{
     width:100%;
     box-sizing:border-box;
-    padding:7px;
+    padding:4px;
     border:1px solid #b7c0ca;
-    border-radius:4px;
-    font-size:13px;
+    border-radius:3px;
+    font-size:11px;
 }
 
 input[readonly]{
@@ -290,83 +265,112 @@ input[readonly]{
 
 .choice-group{
     border:1px solid #b7c0ca;
-    border-radius:4px;
-    padding:8px;
+    border-radius:3px;
+    padding:4px;
     background:#fff;
+    font-size:10px;
 }
 
 .choice-line{
     font-weight:normal;
     display:flex;
-    gap:8px;
+    gap:5px;
     align-items:flex-start;
-    margin:6px 0;
+    margin:3px 0;
 }
 
 .choice-line input{
     width:auto;
-    margin-top:2px;
+    margin-top:1px;
 }
 
 .note-cell{
     font-weight:bold;
-    line-height:1.4;
+    line-height:1.3;
     background:#fff7e6;
+    font-size:11px;
 }
 
 .main-grid{
     display:grid;
-    grid-template-columns:220px 1fr;
-    gap:16px;
+    grid-template-columns:150px 1fr;
+    gap:8px;
     align-items:start;
 }
 
 .requisition-box{
-    min-height:190px;
+    min-height:150px;
 }
 
 .requisition-input{
     writing-mode:vertical-rl;
     transform:rotate(180deg);
-    height:170px;
-    width:70px;
+    height:135px;
+    width:55px;
     margin:auto;
     display:block;
     text-align:center;
-    font-size:15px;
+    font-size:12px;
     font-weight:bold;
 }
 
+.table-scroll{
+    overflow:visible;
+}
+
+.sample-table{
+    table-layout:fixed;
+}
+
 .sample-table th{
-    text-align:center;
+    font-size:9px;
+    line-height:1.1;
+}
+
+.sample-table td{
+    padding:3px;
 }
 
 .sample-table input,
 .sample-table select{
-    min-width:120px;
+    min-width:0;
+    font-size:10px;
+    padding:3px;
 }
 
+.sample-table th:nth-child(1){width:90px;}
+.sample-table th:nth-child(2){width:55px;}
+.sample-table th:nth-child(3){width:55px;}
+.sample-table th:nth-child(4){width:95px;}
+.sample-table th:nth-child(5){width:45px;}
+.sample-table th:nth-child(6){width:65px;}
+.sample-table th:nth-child(7){width:55px;}
+.sample-table th:nth-child(8){width:85px;}
+.sample-table th:nth-child(9){width:85px;}
+.sample-table th:nth-child(10){width:55px;}
+.sample-table th:nth-child(11){width:55px;}
+
 .action-cell{
-    width:90px;
+    width:55px;
     text-align:center;
 }
 
 .button-row{
     display:flex;
     gap:10px;
-    margin-top:18px;
+    margin-top:12px;
 }
 
 button,.button-link{
-    padding:10px 14px;
+    padding:8px 12px;
     background:#2c3e50;
     color:white;
     border:none;
-    border-radius:5px;
+    border-radius:4px;
     cursor:pointer;
     text-decoration:none;
     text-align:center;
-    font-size:14px;
+    font-size:13px;
 }
 
 button.primary{
@@ -374,8 +378,8 @@ button.primary{
 }
 
 .small-button{
-    padding:6px 8px;
-    font-size:12px;
+    padding:5px 6px;
+    font-size:10px;
 }
 
 .danger{
@@ -390,30 +394,26 @@ button.primary{
     display:none;
 }
 
-@media(max-width:1000px){
-    .header{
-        grid-template-columns:1fr;
-        text-align:left;
+@page{
+    size:A4 landscape;
+    margin:8mm;
+}
+
+@media print{
+    body{
+        background:white;
+        padding:0;
     }
 
-    .title,
-    .contact{
-        text-align:left;
-    }
-
-    .main-grid{
-        grid-template-columns:1fr;
-    }
-
-    .requisition-input{
-        writing-mode:horizontal-tb;
-        transform:none;
-        height:auto;
+    .form-shell{
         width:100%;
+        min-height:auto;
+        box-shadow:none;
+        padding:0;
     }
 
-    .table-scroll{
-        overflow-x:auto;
+    .button-row{
+        display:none;
     }
 }
 </style>
@@ -421,19 +421,14 @@ button.primary{
 
 <body>
 <div class="form-shell">
-
 <form method="POST" action="/add">
 <input type="hidden" name="id" value="${escapeHtml(form.id)}">
 <input type="hidden" name="role" value="${escapeHtml(role)}">
 
 <div class="header">
-    <div>
-        <img src="/IC_Labs_Logo.png" class="logo">
-    </div>
+    <div><img src="/IC_Labs_Logo.png" class="logo"></div>
 
-    <div class="title">
-        Electronic Chain of Custody Form
-    </div>
+    <div class="title">Electronic Chain of Custody Form</div>
 
     <div class="contact">
         <strong>IC Labs Contact Information:</strong><br>
@@ -476,7 +471,7 @@ button.primary{
         <td>
             <label>Site Name</label>
             <div class="choice-group">
-                ${isSite ? renderSiteOptions(siteIsOther ? "Other" : form.site_name) : escapeHtml(form.site_name || "-")}
+                ${renderSiteOptions(siteIsOther ? "Other" : form.site_name, isSite)}
             </div>
             ${!isSite ? `<input type="hidden" name="site_name" value="${escapeHtml(form.site_name || "")}">` : ""}
             <input id="siteOther" name="siteOther" class="${siteIsOther ? "" : "hidden"}" value="${siteIsOther ? escapeHtml(form.site_name) : ""}" placeholder="Enter site">
@@ -500,9 +495,7 @@ button.primary{
 
 <div class="main-grid">
     <table class="requisition-box">
-        <tr>
-            <th>Requisition Number</th>
-        </tr>
+        <tr><th>Requisition Number</th></tr>
         <tr>
             <td>
                 <input class="requisition-input" name="requisition_number" value="${escapeHtml(form.requisition_number)}" ${readonly(isSite)}>
@@ -515,15 +508,15 @@ button.primary{
             <thead>
                 <tr>
                     <th>Sample Type</th>
-                    <th>Shipping Temperature</th>
-                    <th>Number of Tubes Sent</th>
-                    <th>Date and Time of Sample Collection</th>
+                    <th>Ship Temp</th>
+                    <th>Tubes Sent</th>
+                    <th>Sample Collection Date/Time</th>
                     <th>Visit</th>
-                    <th>Temperature Reading on Courier Pick Up from Site</th>
-                    <th>Number of Tubes Received</th>
-                    <th>Receiver Initial and Date upon Delivery</th>
+                    <th>Pickup Temp</th>
+                    <th>Tubes Rec.</th>
+                    <th>Receiver Initial/Date</th>
                     <th>Comments</th>
-                    <th>Temperature upon Delivery</th>
+                    <th>Delivery Temp</th>
                     ${isSite ? `<th>Action</th>` : ""}
                 </tr>
             </thead>
@@ -572,7 +565,6 @@ document.querySelectorAll('input[name="site_name"]').forEach(input => {
 
 function addSampleRow(){
     const tbody = document.getElementById("sampleRows");
-
     const tr = document.createElement("tr");
     tr.className = "sample-row";
 
@@ -654,20 +646,6 @@ function saveSampleRows(formId, d, callback) {
         `);
 
         for (let i = 0; i < sampleTypes.length; i++) {
-            const hasAnyValue =
-                sampleTypes[i] ||
-                shippingTemps[i] ||
-                tubesSent[i] ||
-                collectionTimes[i] ||
-                visits[i] ||
-                pickupTemps[i] ||
-                tubesReceived[i] ||
-                receiverInitialDates[i] ||
-                comments[i] ||
-                deliveryTemps[i];
-
-            if (!hasAnyValue) continue;
-
             stmt.run([
                 formId,
                 i,
@@ -688,6 +666,75 @@ function saveSampleRows(formId, d, callback) {
     });
 }
 
+function saveRowsDirectly(formId, rows, callback) {
+    db.run("DELETE FROM coc_sample_rows WHERE form_id = ?", [formId], err => {
+        if (err) return callback(err);
+
+        const stmt = db.prepare(`
+            INSERT INTO coc_sample_rows (
+                form_id,row_order,sample_type,shipping_temp,tubes_sent,
+                sample_collection_datetime,visit,courier_pickup_temp,
+                tubes_received,receiver_initial_date,comments,delivery_temp
+            )
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+        `);
+
+        rows.forEach((row, index) => {
+            stmt.run([
+                formId,
+                index,
+                row.sample_type,
+                row.shipping_temp,
+                row.tubes_sent,
+                row.sample_collection_datetime,
+                row.visit,
+                row.courier_pickup_temp,
+                row.tubes_received,
+                row.receiver_initial_date,
+                row.comments,
+                row.delivery_temp
+            ]);
+        });
+
+        stmt.finalize(callback);
+    });
+}
+
+function mergeRowsForRole(role, d, existingRows) {
+    const sampleTypes = normalizeArray(d.sample_type);
+    const shippingTemps = normalizeArray(d.shipping_temp);
+    const tubesSent = normalizeArray(d.tubes_sent);
+    const collectionTimes = normalizeArray(d.sample_collection_datetime);
+    const visits = normalizeArray(d.visit);
+    const pickupTemps = normalizeArray(d.courier_pickup_temp);
+    const tubesReceived = normalizeArray(d.tubes_received);
+    const receiverInitialDates = normalizeArray(d.receiver_initial_date);
+    const comments = normalizeArray(d.comments);
+    const deliveryTemps = normalizeArray(d.delivery_temp);
+
+    const rowCount = Math.max(sampleTypes.length, existingRows.length, 1);
+    const rows = [];
+
+    for (let i = 0; i < rowCount; i++) {
+        const old = existingRows[i] || {};
+
+        rows.push({
+            sample_type: role === "site" ? sampleTypes[i] : old.sample_type,
+            shipping_temp: role === "site" ? shippingTemps[i] : old.shipping_temp,
+            tubes_sent: role === "site" ? tubesSent[i] : old.tubes_sent,
+            sample_collection_datetime: role === "site" ? collectionTimes[i] : old.sample_collection_datetime,
+            visit: role === "site" ? visits[i] : old.visit,
+            courier_pickup_temp: role === "driver" ? pickupTemps[i] : old.courier_pickup_temp,
+            tubes_received: role === "lab" ? tubesReceived[i] : old.tubes_received,
+            receiver_initial_date: role === "lab" ? receiverInitialDates[i] : old.receiver_initial_date,
+            comments: role === "lab" ? comments[i] : old.comments,
+            delivery_temp: role === "lab" ? deliveryTemps[i] : old.delivery_temp
+        });
+    }
+
+    return rows;
+}
+
 async function generatePdf(formId) {
     return new Promise((resolve, reject) => {
         getFormWithRows(formId, async (err, form, rows) => {
@@ -700,25 +747,25 @@ async function generatePdf(formId) {
             const docRefNum = `IC-${year}-${String(formId).padStart(4, "0")}`;
             const filePath = path.join(folderPath, `eCOC_${formId}.pdf`);
 
-            const doc = new PDFDocument({ margin: 35, size: "A4", layout: "landscape" });
+            const doc = new PDFDocument({ margin: 25, size: "A4", layout: "landscape" });
             const stream = fs.createWriteStream(filePath);
             doc.pipe(stream);
 
             const logoPath = path.join(__dirname, "IC_Labs_Logo.png");
 
             if (fs.existsSync(logoPath)) {
-                doc.image(logoPath, 35, 20, { width: 90 });
+                doc.image(logoPath, 25, 18, { width: 80 });
             }
 
-            doc.font("Helvetica-Bold").fontSize(16).text("Electronic Chain of Custody Form", 0, 35, {
+            doc.font("Helvetica-Bold").fontSize(15).text("Electronic Chain of Custody Form", 0, 35, {
                 align: "center"
             });
 
-            doc.font("Helvetica").fontSize(8).text(
+            doc.font("Helvetica").fontSize(7).text(
                 "IC Labs Contact Information:\n0211407190\ninfo@iclabs.co.za\nGround Floor Albion Springs\n183 Main Road, Rondebosch\nCape Town, Western Cape, South Africa",
-                585,
-                22,
-                { width: 235, align: "right" }
+                590,
+                20,
+                { width: 220, align: "right" }
             );
 
             try {
@@ -730,67 +777,60 @@ async function generatePdf(formId) {
                     includetext: false
                 });
 
-                doc.image(pngBuffer, 650, 110, { width: 120 });
+                doc.image(pngBuffer, 675, 95, { width: 100 });
             } catch (e) {}
 
-            doc.moveDown(5);
-            doc.font("Helvetica-Bold").fontSize(9).text(`Document Ref Number: ${docRefNum}`, 35, 105);
+            doc.font("Helvetica-Bold").fontSize(8).text(`Document Ref Number: ${docRefNum}`, 25, 95);
 
-            const startY = 130;
-            const cellW = 190;
-            const cellH = 38;
+            const startY = 120;
+            const cellW = 197;
+            const cellH = 34;
 
             function infoCell(label, value, x, y) {
                 doc.rect(x, y, cellW, cellH).stroke();
-                doc.font("Helvetica-Bold").fontSize(7).text(label, x + 5, y + 5, { width: cellW - 10 });
-                doc.font("Helvetica").fontSize(8).text(value || "-", x + 5, y + 18, { width: cellW - 10 });
+                doc.font("Helvetica-Bold").fontSize(6).text(label, x + 4, y + 4, { width: cellW - 8 });
+                doc.font("Helvetica").fontSize(7).text(value || "-", x + 4, y + 16, { width: cellW - 8 });
             }
 
-            infoCell("Protocol Name", form.protocol_name, 35, startY);
-            infoCell("Shipping Date", form.shipping_date, 35 + cellW, startY);
-            infoCell("Courier Name", form.courier_name, 35 + cellW * 2, startY);
-            infoCell("Number of Pages", form.page_numbers, 35 + cellW * 3, startY);
+            infoCell("Protocol Name", form.protocol_name, 25, startY);
+            infoCell("Shipping Date", form.shipping_date, 25 + cellW, startY);
+            infoCell("Courier Name", form.courier_name, 25 + cellW * 2, startY);
+            infoCell("Number of Pages", form.page_numbers, 25 + cellW * 3, startY);
 
-            infoCell("Site Name", form.site_name, 35, startY + cellH);
-            infoCell("Shipped By", form.shipped_by, 35 + cellW, startY + cellH);
-            infoCell("Courier Collection Date & Time", formatDateTime(form.courier_collection_datetime), 35 + cellW * 2, startY + cellH);
-            infoCell("Note", "This log must physically accompany the samples.", 35 + cellW * 3, startY + cellH);
+            infoCell("Site Name", form.site_name, 25, startY + cellH);
+            infoCell("Shipped By", form.shipped_by, 25 + cellW, startY + cellH);
+            infoCell("Courier Collection Date & Time", formatDateTime(form.courier_collection_datetime), 25 + cellW * 2, startY + cellH);
+            infoCell("Note", "This log must physically accompany the samples.", 25 + cellW * 3, startY + cellH);
 
-            const reqY = startY + cellH * 2 + 18;
-            doc.rect(35, reqY, 150, 55).stroke();
-            doc.font("Helvetica-Bold").fontSize(8).text("Requisition Number", 40, reqY + 6);
-            doc.font("Helvetica").fontSize(11).text(form.requisition_number || "-", 40, reqY + 28, { width: 140 });
+            const reqY = startY + cellH * 2 + 15;
+            doc.rect(25, reqY, 130, 55).stroke();
+            doc.font("Helvetica-Bold").fontSize(7).text("Requisition Number", 30, reqY + 6);
+            doc.font("Helvetica").fontSize(10).text(form.requisition_number || "-", 30, reqY + 28, { width: 120 });
 
-            const tableX = 200;
+            const tableX = 165;
             let tableY = reqY;
+
             const headers = [
-                "Sample Type",
-                "Ship Temp",
-                "Tubes Sent",
-                "Collection Date/Time",
-                "Visit",
-                "Pickup Temp",
-                "Tubes Received",
-                "Receiver Initial/Date",
-                "Comments",
-                "Delivery Temp"
+                "Sample Type", "Ship Temp", "Tubes Sent", "Collection Date/Time", "Visit",
+                "Pickup Temp", "Tubes Rec.", "Receiver Initial/Date", "Comments", "Delivery Temp"
             ];
 
-            const widths = [75, 55, 55, 100, 45, 65, 65, 95, 90, 65];
+            const widths = [80, 55, 55, 95, 45, 60, 55, 90, 90, 55];
             let x = tableX;
 
-            doc.font("Helvetica-Bold").fontSize(6);
+            doc.font("Helvetica-Bold").fontSize(5.5);
             headers.forEach((h, i) => {
-                doc.rect(x, tableY, widths[i], 25).stroke();
-                doc.text(h, x + 3, tableY + 6, { width: widths[i] - 6 });
+                doc.rect(x, tableY, widths[i], 24).stroke();
+                doc.text(h, x + 2, tableY + 6, { width: widths[i] - 4 });
                 x += widths[i];
             });
 
-            tableY += 25;
-            doc.font("Helvetica").fontSize(6);
+            tableY += 24;
+            doc.font("Helvetica").fontSize(5.5);
 
             rows.forEach(row => {
                 x = tableX;
+
                 const values = [
                     row.sample_type,
                     row.shipping_temp,
@@ -805,17 +845,12 @@ async function generatePdf(formId) {
                 ];
 
                 values.forEach((value, i) => {
-                    doc.rect(x, tableY, widths[i], 30).stroke();
-                    doc.text(value || "-", x + 3, tableY + 6, { width: widths[i] - 6 });
+                    doc.rect(x, tableY, widths[i], 28).stroke();
+                    doc.text(value || "-", x + 2, tableY + 5, { width: widths[i] - 4 });
                     x += widths[i];
                 });
 
-                tableY += 30;
-
-                if (tableY > 520) {
-                    doc.addPage();
-                    tableY = 35;
-                }
+                tableY += 28;
             });
 
             doc.end();
@@ -1063,75 +1098,6 @@ app.post("/add", (req, res) => {
         });
     }
 });
-
-function mergeRowsForRole(role, d, existingRows) {
-    const sampleTypes = normalizeArray(d.sample_type);
-    const shippingTemps = normalizeArray(d.shipping_temp);
-    const tubesSent = normalizeArray(d.tubes_sent);
-    const collectionTimes = normalizeArray(d.sample_collection_datetime);
-    const visits = normalizeArray(d.visit);
-    const pickupTemps = normalizeArray(d.courier_pickup_temp);
-    const tubesReceived = normalizeArray(d.tubes_received);
-    const receiverInitialDates = normalizeArray(d.receiver_initial_date);
-    const comments = normalizeArray(d.comments);
-    const deliveryTemps = normalizeArray(d.delivery_temp);
-
-    const rowCount = Math.max(sampleTypes.length, existingRows.length, 1);
-    const rows = [];
-
-    for (let i = 0; i < rowCount; i++) {
-        const old = existingRows[i] || {};
-
-        rows.push({
-            sample_type: role === "site" ? sampleTypes[i] : old.sample_type,
-            shipping_temp: role === "site" ? shippingTemps[i] : old.shipping_temp,
-            tubes_sent: role === "site" ? tubesSent[i] : old.tubes_sent,
-            sample_collection_datetime: role === "site" ? collectionTimes[i] : old.sample_collection_datetime,
-            visit: role === "site" ? visits[i] : old.visit,
-            courier_pickup_temp: role === "driver" ? pickupTemps[i] : old.courier_pickup_temp,
-            tubes_received: role === "lab" ? tubesReceived[i] : old.tubes_received,
-            receiver_initial_date: role === "lab" ? receiverInitialDates[i] : old.receiver_initial_date,
-            comments: role === "lab" ? comments[i] : old.comments,
-            delivery_temp: role === "lab" ? deliveryTemps[i] : old.delivery_temp
-        });
-    }
-
-    return rows;
-}
-
-function saveRowsDirectly(formId, rows, callback) {
-    db.run("DELETE FROM coc_sample_rows WHERE form_id = ?", [formId], err => {
-        if (err) return callback(err);
-
-        const stmt = db.prepare(`
-            INSERT INTO coc_sample_rows (
-                form_id,row_order,sample_type,shipping_temp,tubes_sent,
-                sample_collection_datetime,visit,courier_pickup_temp,
-                tubes_received,receiver_initial_date,comments,delivery_temp
-            )
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
-        `);
-
-        rows.forEach((row, index) => {
-            stmt.run([
-                formId,
-                index,
-                row.sample_type,
-                row.shipping_temp,
-                row.tubes_sent,
-                row.sample_collection_datetime,
-                row.visit,
-                row.courier_pickup_temp,
-                row.tubes_received,
-                row.receiver_initial_date,
-                row.comments,
-                row.delivery_temp
-            ]);
-        });
-
-        stmt.finalize(callback);
-    });
-}
 
 app.get("/view-pdfs", (req, res) => {
     const pdfDir = path.join(__dirname, "eCOC IC Labs");
