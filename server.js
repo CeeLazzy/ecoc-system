@@ -51,10 +51,17 @@ db.serialize(() => {
             shipped_by TEXT,
             courier_collection_datetime TEXT,
             requisition_number TEXT UNIQUE,
+            pid TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     `);
+
+    db.run("ALTER TABLE coc_forms ADD COLUMN pid TEXT", err => {
+        if (err && !err.message.includes("duplicate column name")) {
+            console.error("PID column error:", err.message);
+        }
+    });
 
     db.run(`
         CREATE TABLE IF NOT EXISTS coc_sample_rows (
@@ -140,22 +147,24 @@ function renderSampleRows(role, rows) {
     return usableRows.map(row => {
         return `
             <tr class="sample-row">
-                <td>
+                <td class="role-site">
                     <select name="sample_type[]" ${disabled(isSite)}>
                         ${renderOptions(sampleTypeOptions, row.sample_type)}
                     </select>
                     ${!isSite ? `<input type="hidden" name="sample_type[]" value="${escapeHtml(row.sample_type || "")}">` : ""}
                 </td>
 
-                <td><input type="number" step="0.1" name="shipping_temp[]" value="${escapeHtml(row.shipping_temp)}" ${readonly(isSite)}></td>
-                <td><input type="number" name="tubes_sent[]" value="${escapeHtml(row.tubes_sent)}" ${readonly(isSite)}></td>
-                <td><input type="datetime-local" name="sample_collection_datetime[]" value="${escapeHtml(row.sample_collection_datetime)}" ${readonly(isSite)}></td>
-                <td><input name="visit[]" value="${escapeHtml(row.visit)}" ${readonly(isSite)}></td>
-                <td><input type="number" step="0.1" name="courier_pickup_temp[]" value="${escapeHtml(row.courier_pickup_temp)}" ${readonly(isDriver)}></td>
-                <td><input type="number" name="tubes_received[]" value="${escapeHtml(row.tubes_received)}" ${readonly(isLab)}></td>
-                <td><input name="receiver_initial_date[]" value="${escapeHtml(row.receiver_initial_date)}" ${readonly(isLab)}></td>
-                <td><input name="comments[]" value="${escapeHtml(row.comments)}" ${readonly(isLab)}></td>
-                <td><input type="number" step="0.1" name="delivery_temp[]" value="${escapeHtml(row.delivery_temp)}" ${readonly(isLab)}></td>
+                <td class="role-site"><input type="number" step="0.1" name="shipping_temp[]" value="${escapeHtml(row.shipping_temp)}" ${readonly(isSite)}></td>
+                <td class="role-site"><input type="number" name="tubes_sent[]" value="${escapeHtml(row.tubes_sent)}" ${readonly(isSite)}></td>
+                <td class="role-site"><input type="datetime-local" name="sample_collection_datetime[]" value="${escapeHtml(row.sample_collection_datetime)}" ${readonly(isSite)}></td>
+                <td class="role-site"><input name="visit[]" value="${escapeHtml(row.visit)}" ${readonly(isSite)}></td>
+
+                <td class="role-driver"><input type="number" step="0.1" name="courier_pickup_temp[]" value="${escapeHtml(row.courier_pickup_temp)}" ${readonly(isDriver)}></td>
+
+                <td class="role-lab"><input type="number" name="tubes_received[]" value="${escapeHtml(row.tubes_received)}" ${readonly(isLab)}></td>
+                <td class="role-lab"><input name="receiver_initial_date[]" value="${escapeHtml(row.receiver_initial_date)}" ${readonly(isLab)}></td>
+                <td class="role-lab"><input name="comments[]" value="${escapeHtml(row.comments)}" ${readonly(isLab)}></td>
+                <td class="role-lab"><input type="number" step="0.1" name="delivery_temp[]" value="${escapeHtml(row.delivery_temp)}" ${readonly(isLab)}></td>
 
                 ${isSite ? `
                     <td class="action-cell">
@@ -263,6 +272,39 @@ input[readonly]{
     background:#f1f3f5;
 }
 
+.role-site{
+    background:#eaf4ff;
+}
+
+.role-driver{
+    background:#fff8dc;
+}
+
+.role-lab{
+    background:#ecfdf3;
+}
+
+.role-key{
+    display:flex;
+    gap:10px;
+    margin:8px 0;
+    font-size:11px;
+    align-items:center;
+}
+
+.role-key span{
+    display:inline-flex;
+    align-items:center;
+    gap:4px;
+}
+
+.role-dot{
+    width:12px;
+    height:12px;
+    border:1px solid #9aa6b2;
+    display:inline-block;
+}
+
 .choice-group{
     border:1px solid #b7c0ca;
     border-radius:3px;
@@ -300,18 +342,6 @@ input[readonly]{
 
 .requisition-box{
     min-height:150px;
-}
-
-.requisition-input{
-    writing-mode:vertical-rl;
-    transform:rotate(180deg);
-    height:135px;
-    width:55px;
-    margin:auto;
-    display:block;
-    text-align:center;
-    font-size:12px;
-    font-weight:bold;
 }
 
 .table-scroll{
@@ -412,7 +442,8 @@ button.primary{
         padding:0;
     }
 
-    .button-row{
+    .button-row,
+    .role-key{
         display:none;
     }
 }
@@ -440,9 +471,15 @@ button.primary{
     </div>
 </div>
 
+<div class="role-key">
+    <span><i class="role-dot role-site"></i> Site</span>
+    <span><i class="role-dot role-driver"></i> Driver</span>
+    <span><i class="role-dot role-lab"></i> Lab</span>
+</div>
+
 <table>
     <tr>
-        <td>
+        <td class="role-site">
             <label>Protocol Name</label>
             <select name="protocol_name" onchange="toggleOther(this,'protocolOther')" ${disabled(isSite)}>
                 ${renderOptions(protocolOptions, protocolIsOther ? "Other" : form.protocol_name)}
@@ -451,24 +488,24 @@ button.primary{
             <input id="protocolOther" name="protocolOther" class="${protocolIsOther ? "" : "hidden"}" value="${protocolIsOther ? escapeHtml(form.protocol_name) : ""}" placeholder="Enter protocol">
         </td>
 
-        <td>
+        <td class="role-site">
             <label>Shipping Date</label>
             <input type="date" name="shipping_date" value="${escapeHtml(form.shipping_date || todayDate())}" ${readonly(isSite)}>
         </td>
 
-        <td>
+        <td class="role-driver">
             <label>Courier Name</label>
             <input name="courier_name" value="${escapeHtml(form.courier_name)}" ${readonly(isDriver)}>
         </td>
 
-        <td>
+        <td class="role-site">
             <label>Number of Pages</label>
             <input type="number" name="page_numbers" value="${escapeHtml(form.page_numbers)}" ${readonly(isSite)}>
         </td>
     </tr>
 
     <tr>
-        <td>
+        <td class="role-site">
             <label>Site Name</label>
             <div class="choice-group">
                 ${renderSiteOptions(siteIsOther ? "Other" : form.site_name, isSite)}
@@ -477,12 +514,12 @@ button.primary{
             <input id="siteOther" name="siteOther" class="${siteIsOther ? "" : "hidden"}" value="${siteIsOther ? escapeHtml(form.site_name) : ""}" placeholder="Enter site">
         </td>
 
-        <td>
+        <td class="role-site">
             <label>Shipped By</label>
             <input name="shipped_by" value="${escapeHtml(form.shipped_by)}" ${readonly(isSite)} placeholder="Name and surname">
         </td>
 
-        <td>
+        <td class="role-driver">
             <label>Courier Collection Date & Time</label>
             <input type="datetime-local" name="courier_collection_datetime" value="${escapeHtml(form.courier_collection_datetime)}" ${readonly(isDriver)}>
         </td>
@@ -494,11 +531,18 @@ button.primary{
 </table>
 
 <div class="main-grid">
-    <table class="requisition-box">
+    <table class="requisition-box role-site">
         <tr><th>Requisition Number</th></tr>
         <tr>
             <td>
-                <input class="requisition-input" name="requisition_number" value="${escapeHtml(form.requisition_number)}" ${readonly(isSite)}>
+                <input name="requisition_number" value="${escapeHtml(form.requisition_number)}" ${readonly(isSite)}>
+            </td>
+        </tr>
+
+        <tr><th>PID Number</th></tr>
+        <tr>
+            <td>
+                <input name="pid" value="${escapeHtml(form.pid)}" ${readonly(isSite)}>
             </td>
         </tr>
     </table>
@@ -507,16 +551,16 @@ button.primary{
         <table class="sample-table" id="sampleTable">
             <thead>
                 <tr>
-                    <th>Sample Type</th>
-                    <th>Ship Temp</th>
-                    <th>Tubes Sent</th>
-                    <th>Sample Collection Date/Time</th>
-                    <th>Visit</th>
-                    <th>Pickup Temp</th>
-                    <th>Tubes Rec.</th>
-                    <th>Receiver Initial/Date</th>
-                    <th>Comments</th>
-                    <th>Delivery Temp</th>
+                    <th class="role-site">Sample Type</th>
+                    <th class="role-site">Ship Temp</th>
+                    <th class="role-site">Tubes Sent</th>
+                    <th class="role-site">Sample Collection Date/Time</th>
+                    <th class="role-site">Visit</th>
+                    <th class="role-driver">Pickup Temp</th>
+                    <th class="role-lab">Tubes Rec.</th>
+                    <th class="role-lab">Receiver Initial/Date</th>
+                    <th class="role-lab">Comments</th>
+                    <th class="role-lab">Delivery Temp</th>
                     ${isSite ? `<th>Action</th>` : ""}
                 </tr>
             </thead>
@@ -569,7 +613,7 @@ function addSampleRow(){
     tr.className = "sample-row";
 
     tr.innerHTML = \`
-        <td>
+        <td class="role-site">
             <select name="sample_type[]">
                 <option value="4ml EDTA">4ml EDTA</option>
                 <option value="6ml EDTA">6ml EDTA</option>
@@ -579,15 +623,15 @@ function addSampleRow(){
                 <option value="Spot Sputum">Spot Sputum</option>
             </select>
         </td>
-        <td><input type="number" step="0.1" name="shipping_temp[]"></td>
-        <td><input type="number" name="tubes_sent[]"></td>
-        <td><input type="datetime-local" name="sample_collection_datetime[]"></td>
-        <td><input name="visit[]"></td>
-        <td><input type="number" step="0.1" name="courier_pickup_temp[]" readonly></td>
-        <td><input type="number" name="tubes_received[]" readonly></td>
-        <td><input name="receiver_initial_date[]" readonly></td>
-        <td><input name="comments[]" readonly></td>
-        <td><input type="number" step="0.1" name="delivery_temp[]" readonly></td>
+        <td class="role-site"><input type="number" step="0.1" name="shipping_temp[]"></td>
+        <td class="role-site"><input type="number" name="tubes_sent[]"></td>
+        <td class="role-site"><input type="datetime-local" name="sample_collection_datetime[]"></td>
+        <td class="role-site"><input name="visit[]"></td>
+        <td class="role-driver"><input type="number" step="0.1" name="courier_pickup_temp[]" readonly></td>
+        <td class="role-lab"><input type="number" name="tubes_received[]" readonly></td>
+        <td class="role-lab"><input name="receiver_initial_date[]" readonly></td>
+        <td class="role-lab"><input name="comments[]" readonly></td>
+        <td class="role-lab"><input type="number" step="0.1" name="delivery_temp[]" readonly></td>
         <td class="action-cell"><button type="button" class="small-button danger" onclick="removeSampleRow(this)">Remove</button></td>
     \`;
 
@@ -762,7 +806,7 @@ async function generatePdf(formId) {
             });
 
             doc.font("Helvetica").fontSize(7).text(
-                "IC Labs Contact Information:\n0211407190\ninfo@iclabs.co.za\nGround Floor Albion Springs\n183 Main Road, Rondebosch\nCape Town, Western Cape, South Africa",
+                "IC Labs Contact Information:\\n0211407190\\ninfo@iclabs.co.za\\nGround Floor Albion Springs\\n183 Main Road, Rondebosch\\nCape Town, Western Cape, South Africa",
                 590,
                 20,
                 { width: 220, align: "right" }
@@ -803,9 +847,13 @@ async function generatePdf(formId) {
             infoCell("Note", "This log must physically accompany the samples.", 25 + cellW * 3, startY + cellH);
 
             const reqY = startY + cellH * 2 + 15;
-            doc.rect(25, reqY, 130, 55).stroke();
+            doc.rect(25, reqY, 130, 75).stroke();
+
             doc.font("Helvetica-Bold").fontSize(7).text("Requisition Number", 30, reqY + 6);
-            doc.font("Helvetica").fontSize(10).text(form.requisition_number || "-", 30, reqY + 28, { width: 120 });
+            doc.font("Helvetica").fontSize(9).text(form.requisition_number || "-", 30, reqY + 20, { width: 120 });
+
+            doc.font("Helvetica-Bold").fontSize(7).text("PID Number", 30, reqY + 42);
+            doc.font("Helvetica").fontSize(9).text(form.pid || "-", 30, reqY + 56, { width: 120 });
 
             const tableX = 165;
             let tableY = reqY;
@@ -1016,7 +1064,8 @@ app.post("/add", (req, res) => {
                 page_numbers: role === "site" ? d.page_numbers : existingForm.page_numbers,
                 shipped_by: role === "site" ? d.shipped_by : existingForm.shipped_by,
                 courier_collection_datetime: role === "driver" ? d.courier_collection_datetime : existingForm.courier_collection_datetime,
-                requisition_number: role === "site" ? d.requisition_number : existingForm.requisition_number
+                requisition_number: role === "site" ? d.requisition_number : existingForm.requisition_number,
+                pid: role === "site" ? d.pid : existingForm.pid
             };
 
             db.run(`
@@ -1029,6 +1078,7 @@ app.post("/add", (req, res) => {
                     shipped_by=?,
                     courier_collection_datetime=?,
                     requisition_number=?,
+                    pid=?,
                     updated_at=CURRENT_TIMESTAMP
                 WHERE id=?
             `, [
@@ -1040,6 +1090,7 @@ app.post("/add", (req, res) => {
                 updatedForm.shipped_by,
                 updatedForm.courier_collection_datetime,
                 updatedForm.requisition_number,
+                updatedForm.pid,
                 d.id
             ], err => {
                 if (err) return res.send("Update Error: " + err.message);
@@ -1067,9 +1118,9 @@ app.post("/add", (req, res) => {
         db.run(`
             INSERT INTO coc_forms (
                 protocol_name,site_name,shipping_date,courier_name,
-                page_numbers,shipped_by,courier_collection_datetime,requisition_number
+                page_numbers,shipped_by,courier_collection_datetime,requisition_number,pid
             )
-            VALUES (?,?,?,?,?,?,?,?)
+            VALUES (?,?,?,?,?,?,?,?,?)
         `, [
             protocol,
             site,
@@ -1078,7 +1129,8 @@ app.post("/add", (req, res) => {
             d.page_numbers,
             d.shipped_by,
             d.courier_collection_datetime,
-            d.requisition_number
+            d.requisition_number,
+            d.pid
         ], function(err) {
             if (err) return res.send("DB Error: " + err.message);
 
