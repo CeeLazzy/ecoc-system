@@ -123,6 +123,25 @@ border-radius:5px;
 border:1px solid #ccc;
 }
 
+.checkbox-group{
+margin-top:5px;
+border:1px solid #ccc;
+border-radius:5px;
+padding:10px;
+background:#fff;
+}
+
+.checkbox-group label{
+font-weight:normal;
+display:block;
+margin-top:8px;
+}
+
+.checkbox-group input{
+width:auto;
+margin-right:8px;
+}
+
 button{
 margin-top:20px;
 padding:10px;
@@ -165,12 +184,38 @@ Electronic Chain of Custody
 <input id="protocolOther" name="protocolOther" class="hidden" placeholder="Enter Protocol" value="${data.protocol_name==='Other'?data.protocolOther:''}">
 
 <label>Site Name</label>
-<select name="site_name" onchange="toggleOther(this,'siteOther')" ${isDriver ? "readonly" : ""}${isLab ? "readonly" : ""}>
-  <option ${data.site_name==='GSH J52'?'selected':''}>GSH J52</option>
-  <option ${data.site_name==='Philippi Village'?'selected':''}>Philippi Village</option>
-  <option ${data.site_name==='Other'?'selected':''}>Other</option>
-</select>
-<input id="siteOther" name="siteOther" class="hidden" placeholder="Enter Site" value="${data.site_name==='Other'?data.siteOther:''}">
+
+<div class="checkbox-group">
+  <label>
+    <input type="radio" name="site_name" value="710-006 (Aurum Institute CRS)"
+      ${data.site_name === '710-006 (Aurum Institute CRS)' ? 'checked' : ''}
+      ${isDriver || isLab ? 'disabled' : ''}>
+    710-006 (Aurum Institute CRS)
+  </label>
+
+  <label>
+    <input type="radio" name="site_name" value="710-045 (WITS RHI-Shandukani Research)"
+      ${data.site_name === '710-045 (WITS RHI-Shandukani Research)' ? 'checked' : ''}
+      ${isDriver || isLab ? 'disabled' : ''}>
+    710-045 (WITS RHI-Shandukani Research)
+  </label>
+
+  <label>
+    <input type="radio" name="site_name" value="710-TASK Clinical Research Centre"
+      ${data.site_name === '710-TASK Clinical Research Centre' ? 'checked' : ''}
+      ${isDriver || isLab ? 'disabled' : ''}>
+    710-TASK Clinical Research Centre
+  </label>
+
+  <label>
+    <input type="radio" name="site_name" value="710-040 (Centre of Tuberculosis Research Innovation)"
+      ${data.site_name === '710-040 (Centre of Tuberculosis Research Innovation)' ? 'checked' : ''}
+      ${isDriver || isLab ? 'disabled' : ''}>
+    710-040 (Centre of Tuberculosis Research Innovation)
+  </label>
+</div>
+
+${isDriver || isLab ? `<input type="hidden" name="site_name" value="${data.site_name || ''}">` : ""}
 <label>Shipping Date</label>
 <input type="date" name="shipping_date" value="${data.shipping_date || todayDate()}">
 
@@ -199,14 +244,14 @@ Electronic Chain of Custody
 <input name="pid" value="${data.pid || ''}"${isDriver ? "readonly" : ""}${isLab ? "readonly" : ""}>
 
 <label>Sample Type</label>
-<select name="sample_type" onchange="toggleOther(this,'sampleOther')" ${isDriver ? "readonly" : ""}${isLab ? "readonly" : ""}>
-  <option ${data.sample_type==='Blood'?'selected':''}>Blood</option>
-  <option ${data.sample_type==='Leukopak'?'selected':''}>Leukopak</option>
-  <option ${data.sample_type==='Sputum'?'selected':''}>Sputum</option>
+<select name="sample_type" ${isDriver ? "readonly" : ""}${isLab ? "readonly" : ""}>
+  <option ${data.sample_type==='4ml EDTA'?'selected':''}>4ml EDTA</option>
+  <option ${data.sample_type==='6ml EDTA'?'selected':''}>6ml EDTA</option>
+  <option ${data.sample_type==='4ml SST'?'selected':''}>4ml SST</option>
   <option ${data.sample_type==='Urine'?'selected':''}>Urine</option>
-  <option ${data.sample_type==='Other'?'selected':''}>Other</option>
+  <option ${data.sample_type==='PK Plasma Aliquots'?'selected':''}>PK Plasma Aliquots</option>
+  <option ${data.sample_type==='Spot Sputum'?'selected':''}>Spot Sputum</option>
 </select>
-<input id="sampleOther" name="sampleOther" class="hidden" placeholder="Enter Sample Type" value="${data.sample_type==='Other'?data.sampleOther:''}">
 
 
 <label>Temperature Type</label>
