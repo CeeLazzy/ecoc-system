@@ -316,18 +316,23 @@ th{background:#e8eef5;font-size:10px;text-align:center;}
 label{font-weight:bold;display:block;margin-bottom:3px;font-size:11px;}
 input,select,textarea{width:100%;box-sizing:border-box;padding:4px;border:1px solid #b7c0ca;border-radius:3px;font-size:11px;}
 input[readonly]{background:#f1f3f5;}
+
 .active-required{
-    background:#fffafa;
+    background:#ffd6d6;
 }
+
 .role-key{display:flex;gap:10px;margin:8px 0;font-size:11px;align-items:center;}
 .role-key span{display:inline-flex;align-items:center;gap:4px;}
-.role-dot{width:12px;height:12px;border:1px solid #c0392b;display:inline-block;background:#fff5f5;}
+.role-dot{width:12px;height:12px;border:1px solid #9aa6b2;display:inline-block;background:#ffd6d6;}
+
 .instruction-box{margin:8px 0;padding:8px 10px;background:#f5f7fa;border-left:4px solid #1f3a5f;font-size:12px;}
 .owner-box{margin:8px 0;padding:8px 10px;background:#eef4fb;border:1px solid #c9d8e8;font-size:12px;display:flex;justify-content:space-between;align-items:center;}
 .owner-box a{background:#1f3a5f;color:white;text-decoration:none;padding:7px 10px;border-radius:4px;}
+
 .choice-group{border:1px solid #b7c0ca;border-radius:3px;padding:4px;background:#fff;font-size:10px;}
 .choice-line{font-weight:normal;display:flex;gap:5px;align-items:flex-start;margin:3px 0;}
 .choice-line input{width:auto;margin-top:1px;}
+
 .note-cell{font-weight:bold;line-height:1.3;background:#fff7e6;font-size:11px;}
 .main-grid{display:grid;grid-template-columns:150px 1fr;gap:8px;align-items:start;}
 .requisition-box{min-height:150px;}
@@ -348,6 +353,7 @@ input[readonly]{background:#f1f3f5;}
 .sample-table th:nth-child(9){width:80px;}
 .sample-table th:nth-child(10){width:55px;}
 .sample-table th:nth-child(11){width:55px;}
+
 .action-cell{width:55px;text-align:center;}
 .button-row{display:flex;gap:10px;margin-top:12px;}
 button,.button-link{padding:8px 12px;background:#2c3e50;color:white;border:none;border-radius:4px;cursor:pointer;text-decoration:none;text-align:center;font-size:13px;}
@@ -356,14 +362,25 @@ button.primary{flex:1;}
 .danger{background:#b42318;}
 .success{background:#218838;}
 .hidden{display:none;}
-.missing-field,.required-empty{border:2px solid #c0392b!important;background:#ffecec!important;}
+
+.missing-field,
+.required-empty{
+    border:1px solid #b7c0ca!important;
+    background:#ffb3b3!important;
+}
+
 .required-cell{
     box-shadow:none;
 }
+
 .lock-badge{font-weight:bold;color:#7a4b00;}
+
 @page{size:A4 landscape;margin:8mm;}
-@media print{body{background:white;padding:0;}.form-shell{width:100%;min-height:auto;box-shadow:none;padding:0;}.button-row,.role-key,.instruction-box,.owner-box{display:none;}}
-</style>
+@media print{
+    body{background:white;padding:0;}
+    .form-shell{width:100%;min-height:auto;box-shadow:none;padding:0;}
+    .button-row,.role-key,.instruction-box,.owner-box{display:none;}
+}</style>
 </head>
 <body>
 <div class="form-shell">
