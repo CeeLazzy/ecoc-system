@@ -363,8 +363,15 @@ button.primary{flex:1;}
 .success{background:#218838;}
 .hidden{display:none;}
 
-.missing-field,.required-empty{border:1px solid #b7c0ca!important;background:#fffbe6!important;}
-.required-cell{box-shadow:none;}
+.missing-field,
+.required-empty{
+    border:1px solid #b7c0ca!important;
+    background:inherit!important;
+}
+
+.required-cell{
+    box-shadow:none;
+}
 
 .lock-badge{font-weight:bold;color:#7a4b00;}
 @page{size:A4 landscape;margin:8mm;}
