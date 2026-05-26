@@ -15,8 +15,11 @@ app.use("/pdfs", express.static(path.join(__dirname, "eCOC IC Labs")));
 const users = {
     site: "site123",
     driver: "driver123",
-    lab: "lab123"
+    lab: "lab123",
+    owner: "owner123"
 };
+
+const roles = ["site", "driver", "lab", "owner"];
 
 const protocolOptions = ["TBD15-201", "Brilliant B011", "Align", "Transgender", "Other"];
 
@@ -61,17 +64,27 @@ db.serialize(() => {
             delivery_datetime TEXT,
             requisition_number TEXT UNIQUE,
             pid TEXT,
+            site_locked INTEGER DEFAULT 0,
+            driver_locked INTEGER DEFAULT 0,
+            lab_locked INTEGER DEFAULT 0,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     `);
 
-    db.run("ALTER TABLE coc_forms ADD COLUMN pid TEXT", err => {
-        if (err && !err.message.includes("duplicate column name")) console.error("PID column error:", err.message);
-    });
-
-    db.run("ALTER TABLE coc_forms ADD COLUMN delivery_datetime TEXT", err => {
-        if (err && !err.message.includes("duplicate column name")) console.error("Delivery datetime column error:", err.message);
+    [
+        "pid TEXT",
+        "delivery_datetime TEXT",
+        "site_locked INTEGER DEFAULT 0",
+        "driver_locked INTEGER DEFAULT 0",
+        "lab_locked INTEGER DEFAULT 0"
+    ].forEach(def => {
+        const column = def.split(" ")[0];
+        db.run(`ALTER TABLE coc_forms ADD COLUMN ${def}`, err => {
+            if (err && !err.message.includes("duplicate column name")) {
+                console.error(column + " column error:", err.message);
+            }
+        });
     });
 
     db.run(`
@@ -95,7 +108,9 @@ db.serialize(() => {
     `);
 
     db.run("ALTER TABLE coc_sample_rows ADD COLUMN shipping_temp_other TEXT", err => {
-        if (err && !err.message.includes("duplicate column name")) console.error("Shipping temp other column error:", err.message);
+        if (err && !err.message.includes("duplicate column name")) {
+            console.error("shipping_temp_other column error:", err.message);
+        }
     });
 
     db.run(`
@@ -151,8 +166,8 @@ function activeRoleClass(currentRole, fieldRole) {
     return currentRole === fieldRole ? `active-${fieldRole}` : "";
 }
 
-function requiredAttr(currentRole, fieldRole, label) {
-    return currentRole === fieldRole ? `data-required-label="${escapeHtml(label)}"` : "";
+function requiredAttr(canEdit, label) {
+    return canEdit ? `data-required-label="${escapeHtml(label)}"` : "";
 }
 
 function renderOptions(options, currentValue) {
@@ -161,27 +176,50 @@ function renderOptions(options, currentValue) {
     }).join("");
 }
 
+function roleInstructions(role, form = {}) {
+    if (role === "site" && form.site_locked) {
+        return "Your section is locked. Contact the owner if changes are required.";
+    }
+
+    if (role === "driver" && form.driver_locked) {
+        return "Your section is locked. Contact the owner if changes are required.";
+    }
+
+    if (role === "lab" && form.lab_locked) {
+        return "Your section is locked. Contact the owner if changes are required.";
+    }
+
+    const instructions = {
+        site: "Complete protocol, site, shipping date, shipped by, page count, requisition number, PID, sample details, tubes sent, collection date/time and visit.",
+        driver: "Complete courier name, courier collection date/time, monitor S/N and pickup temperature.",
+        lab: "Complete delivery date/time, tubes received, receiver initial/date, comments and delivery temperature.",
+        owner: "Review the eCOC and manage edit access for the site, driver and lab sections."
+    };
+
+    return instructions[role] || "";
+}
+
 function renderSiteOptions(currentValue, canEdit) {
     return siteOptions.map(site => {
         return `
             <label class="choice-line">
-                <input type="radio" name="site_name" value="${escapeHtml(site)}" ${checked(currentValue, site)} ${disabled(canEdit)} ${canEdit ? `data-required-label="Site Name"` : ""}>
+                <input type="radio" name="site_name" value="${escapeHtml(site)}" ${checked(currentValue, site)} ${disabled(canEdit)} ${requiredAttr(canEdit, "Site Name")}>
                 <span>${escapeHtml(site)}</span>
             </label>
         `;
     }).join("");
 }
 
-function renderMonitorRows(role, monitors) {
-    const isSite = role === "site";
+function renderMonitorRows(role, monitors, form = {}) {
+    const canEditDriver = role === "driver" && !form.driver_locked;
     const usableMonitors = monitors.length ? monitors : [{}];
 
     return usableMonitors.map(monitor => `
         <tr class="monitor-row">
-            <td class="${activeRoleClass(role, "site")}">
-                <input name="monitor_sn[]" value="${escapeHtml(monitor.monitor_sn)}" ${readonly(isSite)} ${requiredAttr(role, "site", "Monitor S/N")}>
+            <td class="${activeRoleClass(role, "driver")}">
+                <input name="monitor_sn[]" value="${escapeHtml(monitor.monitor_sn)}" ${readonly(canEditDriver)} ${requiredAttr(canEditDriver, "Monitor S/N")}>
             </td>
-            ${isSite ? `
+            ${canEditDriver ? `
                 <td class="action-cell">
                     <button type="button" class="small-button danger" onclick="removeMonitorRow(this)">Remove</button>
                 </td>
@@ -190,10 +228,10 @@ function renderMonitorRows(role, monitors) {
     `).join("");
 }
 
-function renderSampleRows(role, rows) {
-    const isSite = role === "site";
-    const isDriver = role === "driver";
-    const isLab = role === "lab";
+function renderSampleRows(role, rows, form = {}) {
+    const canEditSite = role === "site" && !form.site_locked;
+    const canEditDriver = role === "driver" && !form.driver_locked;
+    const canEditLab = role === "lab" && !form.lab_locked;
     const usableRows = rows.length ? rows : [{}];
 
     return usableRows.map(row => {
@@ -202,32 +240,32 @@ function renderSampleRows(role, rows) {
         return `
             <tr class="sample-row">
                 <td class="${activeRoleClass(role, "site")}">
-                    <select name="sample_type[]" ${disabled(isSite)} ${requiredAttr(role, "site", "Sample Type")}>
+                    <select name="sample_type[]" ${disabled(canEditSite)} ${requiredAttr(canEditSite, "Sample Type")}>
                         ${renderOptions(sampleTypeOptions, row.sample_type)}
                     </select>
-                    ${!isSite ? `<input type="hidden" name="sample_type[]" value="${escapeHtml(row.sample_type || "")}">` : ""}
+                    ${!canEditSite ? `<input type="hidden" name="sample_type[]" value="${escapeHtml(row.sample_type || "")}">` : ""}
                 </td>
 
                 <td class="${activeRoleClass(role, "site")}">
-                    <select name="shipping_temp[]" onchange="toggleRowOther(this)" ${disabled(isSite)} ${requiredAttr(role, "site", "Shipping Temperature")}>
+                    <select name="shipping_temp[]" onchange="toggleRowOther(this)" ${disabled(canEditSite)} ${requiredAttr(canEditSite, "Shipping Temperature")}>
                         ${renderOptions(shippingTempOptions, tempIsOther ? "Other" : row.shipping_temp)}
                     </select>
-                    ${!isSite ? `<input type="hidden" name="shipping_temp[]" value="${escapeHtml(row.shipping_temp || "")}">` : ""}
+                    ${!canEditSite ? `<input type="hidden" name="shipping_temp[]" value="${escapeHtml(row.shipping_temp || "")}">` : ""}
                     <input name="shipping_temp_other[]" class="${tempIsOther ? "" : "hidden"}" value="${tempIsOther ? escapeHtml(row.shipping_temp) : escapeHtml(row.shipping_temp_other)}" placeholder="Enter temp condition">
                 </td>
 
-                <td class="${activeRoleClass(role, "site")}"><input type="number" name="tubes_sent[]" value="${escapeHtml(row.tubes_sent)}" ${readonly(isSite)} ${requiredAttr(role, "site", "Tubes Sent")}></td>
-                <td class="${activeRoleClass(role, "site")}"><input type="datetime-local" name="sample_collection_datetime[]" value="${escapeHtml(row.sample_collection_datetime)}" ${readonly(isSite)} ${requiredAttr(role, "site", "Sample Collection Date/Time")}></td>
-                <td class="${activeRoleClass(role, "site")}"><input name="visit[]" value="${escapeHtml(row.visit)}" ${readonly(isSite)} ${requiredAttr(role, "site", "Visit")}></td>
+                <td class="${activeRoleClass(role, "site")}"><input type="number" name="tubes_sent[]" value="${escapeHtml(row.tubes_sent)}" ${readonly(canEditSite)} ${requiredAttr(canEditSite, "Tubes Sent")}></td>
+                <td class="${activeRoleClass(role, "site")}"><input type="datetime-local" name="sample_collection_datetime[]" value="${escapeHtml(row.sample_collection_datetime)}" ${readonly(canEditSite)} ${requiredAttr(canEditSite, "Sample Collection Date/Time")}></td>
+                <td class="${activeRoleClass(role, "site")}"><input name="visit[]" value="${escapeHtml(row.visit)}" ${readonly(canEditSite)} ${requiredAttr(canEditSite, "Visit")}></td>
 
-                <td class="${activeRoleClass(role, "driver")}"><input type="number" step="0.1" name="courier_pickup_temp[]" value="${escapeHtml(row.courier_pickup_temp)}" ${readonly(isDriver)} ${requiredAttr(role, "driver", "Pickup Temperature")}></td>
+                <td class="${activeRoleClass(role, "driver")}"><input type="number" step="0.1" name="courier_pickup_temp[]" value="${escapeHtml(row.courier_pickup_temp)}" ${readonly(canEditDriver)} ${requiredAttr(canEditDriver, "Pickup Temperature")}></td>
 
-                <td class="${activeRoleClass(role, "lab")}"><input type="number" name="tubes_received[]" value="${escapeHtml(row.tubes_received)}" ${readonly(isLab)} ${requiredAttr(role, "lab", "Tubes Received")}></td>
-                <td class="${activeRoleClass(role, "lab")}"><input name="receiver_initial_date[]" value="${escapeHtml(row.receiver_initial_date)}" ${readonly(isLab)} ${requiredAttr(role, "lab", "Receiver Initial/Date")}></td>
-                <td class="${activeRoleClass(role, "lab")}"><input name="comments[]" value="${escapeHtml(row.comments)}" ${readonly(isLab)}></td>
-                <td class="${activeRoleClass(role, "lab")}"><input type="number" step="0.1" name="delivery_temp[]" value="${escapeHtml(row.delivery_temp)}" ${readonly(isLab)} ${requiredAttr(role, "lab", "Delivery Temperature")}></td>
+                <td class="${activeRoleClass(role, "lab")}"><input type="number" name="tubes_received[]" value="${escapeHtml(row.tubes_received)}" ${readonly(canEditLab)} ${requiredAttr(canEditLab, "Tubes Received")}></td>
+                <td class="${activeRoleClass(role, "lab")}"><input name="receiver_initial_date[]" value="${escapeHtml(row.receiver_initial_date)}" ${readonly(canEditLab)} ${requiredAttr(canEditLab, "Receiver Initial/Date")}></td>
+                <td class="${activeRoleClass(role, "lab")}"><input name="comments[]" value="${escapeHtml(row.comments)}" ${readonly(canEditLab)}></td>
+                <td class="${activeRoleClass(role, "lab")}"><input type="number" step="0.1" name="delivery_temp[]" value="${escapeHtml(row.delivery_temp)}" ${readonly(canEditLab)} ${requiredAttr(canEditLab, "Delivery Temperature")}></td>
 
-                ${isSite ? `
+                ${canEditSite ? `
                     <td class="action-cell">
                         <button type="button" class="small-button danger" onclick="removeSampleRow(this)">Remove</button>
                     </td>
@@ -238,9 +276,10 @@ function renderSampleRows(role, rows) {
 }
 
 function renderForm(role, form = {}, rows = [], monitors = []) {
-    const isSite = role === "site";
-    const isDriver = role === "driver";
-    const isLab = role === "lab";
+    const canEditSite = role === "site" && !form.site_locked;
+    const canEditDriver = role === "driver" && !form.driver_locked;
+    const canEditLab = role === "lab" && !form.lab_locked;
+    const isOwner = role === "owner";
 
     const protocolIsOther = form.protocol_name && !protocolOptions.includes(form.protocol_name);
     const siteIsOther = form.site_name && !siteOptions.includes(form.site_name);
@@ -249,176 +288,43 @@ function renderForm(role, form = {}, rows = [], monitors = []) {
 <html>
 <head>
 <title>IC Labs eCOC</title>
-
 <style>
-body{
-    font-family:Arial, sans-serif;
-    margin:0;
-    padding:10px;
-    background:#dfe4ea;
-    color:#1f2933;
-}
-
-.form-shell{
-    width:1120px;
-    min-height:790px;
-    margin:auto;
-    background:white;
-    padding:16px;
-    border-radius:0;
-    box-shadow:0 4px 10px rgba(0,0,0,0.12);
-    box-sizing:border-box;
-}
-
-.header{
-    display:grid;
-    grid-template-columns:220px 1fr 300px;
-    align-items:start;
-    gap:12px;
-    margin-bottom:10px;
-}
-
-.logo{ width:135px; }
-
-.title{
-    text-align:center;
-    font-size:20px;
-    font-weight:bold;
-    padding-top:18px;
-}
-
-.contact{
-    font-size:11px;
-    line-height:1.3;
-    text-align:right;
-}
-
-table{
-    width:100%;
-    border-collapse:collapse;
-    margin-top:8px;
-    table-layout:fixed;
-}
-
-th,td{
-    border:1px solid #9aa6b2;
-    padding:4px;
-    vertical-align:top;
-}
-
-th{
-    background:#e8eef5;
-    font-size:10px;
-    text-align:center;
-}
-
-label{
-    font-weight:bold;
-    display:block;
-    margin-bottom:3px;
-    font-size:11px;
-}
-
-input,select,textarea{
-    width:100%;
-    box-sizing:border-box;
-    padding:4px;
-    border:1px solid #b7c0ca;
-    border-radius:3px;
-    font-size:11px;
-}
-
-input[readonly]{ background:#f1f3f5; }
-
-.active-site{ background:#dff0ff; }
-.active-driver{ background:#fff2b8; }
-.active-lab{ background:#dff8e8; }
-
-.role-key{
-    display:flex;
-    gap:10px;
-    margin:8px 0;
-    font-size:11px;
-    align-items:center;
-}
-
-.role-key span{
-    display:inline-flex;
-    align-items:center;
-    gap:4px;
-}
-
-.role-dot{
-    width:12px;
-    height:12px;
-    border:1px solid #9aa6b2;
-    display:inline-block;
-}
-
-.dot-site{ background:#dff0ff; }
-.dot-driver{ background:#fff2b8; }
-.dot-lab{ background:#dff8e8; }
-
-.choice-group{
-    border:1px solid #b7c0ca;
-    border-radius:3px;
-    padding:4px;
-    background:#fff;
-    font-size:10px;
-}
-
-.choice-line{
-    font-weight:normal;
-    display:flex;
-    gap:5px;
-    align-items:flex-start;
-    margin:3px 0;
-}
-
-.choice-line input{
-    width:auto;
-    margin-top:1px;
-}
-
-.note-cell{
-    font-weight:bold;
-    line-height:1.3;
-    background:#fff7e6;
-    font-size:11px;
-}
-
-.main-grid{
-    display:grid;
-    grid-template-columns:150px 1fr;
-    gap:8px;
-    align-items:start;
-}
-
-.requisition-box{ min-height:150px; }
-
-.monitor-table th,
-.monitor-table td{
-    font-size:10px;
-}
-
-.table-scroll{ overflow:visible; }
-
-.sample-table{ table-layout:fixed; }
-
-.sample-table th{
-    font-size:9px;
-    line-height:1.1;
-}
-
-.sample-table td{ padding:3px; }
-
-.sample-table input,
-.sample-table select{
-    min-width:0;
-    font-size:10px;
-    padding:3px;
-}
-
+body{font-family:Arial,sans-serif;margin:0;padding:10px;background:#dfe4ea;color:#1f2933;}
+.form-shell{width:1120px;min-height:790px;margin:auto;background:white;padding:16px;border-radius:0;box-shadow:0 4px 10px rgba(0,0,0,.12);box-sizing:border-box;}
+.header{display:grid;grid-template-columns:220px 1fr 300px;align-items:start;gap:12px;margin-bottom:10px;}
+.logo{width:135px;}
+.title{text-align:center;font-size:20px;font-weight:bold;padding-top:18px;}
+.contact{font-size:11px;line-height:1.3;text-align:right;}
+table{width:100%;border-collapse:collapse;margin-top:8px;table-layout:fixed;}
+th,td{border:1px solid #9aa6b2;padding:4px;vertical-align:top;}
+th{background:#e8eef5;font-size:10px;text-align:center;}
+label{font-weight:bold;display:block;margin-bottom:3px;font-size:11px;}
+input,select,textarea{width:100%;box-sizing:border-box;padding:4px;border:1px solid #b7c0ca;border-radius:3px;font-size:11px;}
+input[readonly]{background:#f1f3f5;}
+.active-site{background:#dff0ff;}
+.active-driver{background:#fff2b8;}
+.active-lab{background:#dff8e8;}
+.role-key{display:flex;gap:10px;margin:8px 0;font-size:11px;align-items:center;}
+.role-key span{display:inline-flex;align-items:center;gap:4px;}
+.role-dot{width:12px;height:12px;border:1px solid #9aa6b2;display:inline-block;}
+.dot-site{background:#dff0ff;}
+.dot-driver{background:#fff2b8;}
+.dot-lab{background:#dff8e8;}
+.instruction-box{margin:8px 0;padding:8px 10px;background:#f5f7fa;border-left:4px solid #1f3a5f;font-size:12px;}
+.owner-box{margin:8px 0;padding:8px 10px;background:#eef4fb;border:1px solid #c9d8e8;font-size:12px;display:flex;justify-content:space-between;align-items:center;}
+.owner-box a{background:#1f3a5f;color:white;text-decoration:none;padding:7px 10px;border-radius:4px;}
+.choice-group{border:1px solid #b7c0ca;border-radius:3px;padding:4px;background:#fff;font-size:10px;}
+.choice-line{font-weight:normal;display:flex;gap:5px;align-items:flex-start;margin:3px 0;}
+.choice-line input{width:auto;margin-top:1px;}
+.note-cell{font-weight:bold;line-height:1.3;background:#fff7e6;font-size:11px;}
+.main-grid{display:grid;grid-template-columns:150px 1fr;gap:8px;align-items:start;}
+.requisition-box{min-height:150px;}
+.monitor-table th,.monitor-table td{font-size:10px;}
+.table-scroll{overflow:visible;}
+.sample-table{table-layout:fixed;}
+.sample-table th{font-size:9px;line-height:1.1;}
+.sample-table td{padding:3px;}
+.sample-table input,.sample-table select{min-width:0;font-size:10px;padding:3px;}
 .sample-table th:nth-child(1){width:90px;}
 .sample-table th:nth-child(2){width:70px;}
 .sample-table th:nth-child(3){width:50px;}
@@ -430,73 +336,20 @@ input[readonly]{ background:#f1f3f5; }
 .sample-table th:nth-child(9){width:80px;}
 .sample-table th:nth-child(10){width:55px;}
 .sample-table th:nth-child(11){width:55px;}
-
-.action-cell{
-    width:55px;
-    text-align:center;
-}
-
-.button-row{
-    display:flex;
-    gap:10px;
-    margin-top:12px;
-}
-
-button,.button-link{
-    padding:8px 12px;
-    background:#2c3e50;
-    color:white;
-    border:none;
-    border-radius:4px;
-    cursor:pointer;
-    text-decoration:none;
-    text-align:center;
-    font-size:13px;
-}
-
-button.primary{ flex:1; }
-
-.small-button{
-    padding:5px 6px;
-    font-size:10px;
-}
-
-.danger{ background:#b42318; }
-.success{ background:#218838; }
-
-.hidden{ display:none; }
-
-.missing-field{
-    border:2px solid #c0392b !important;
-    background:#fff5f5 !important;
-}
-
-@page{
-    size:A4 landscape;
-    margin:8mm;
-}
-
-@media print{
-    body{
-        background:white;
-        padding:0;
-    }
-
-    .form-shell{
-        width:100%;
-        min-height:auto;
-        box-shadow:none;
-        padding:0;
-    }
-
-    .button-row,
-    .role-key{
-        display:none;
-    }
-}
+.action-cell{width:55px;text-align:center;}
+.button-row{display:flex;gap:10px;margin-top:12px;}
+button,.button-link{padding:8px 12px;background:#2c3e50;color:white;border:none;border-radius:4px;cursor:pointer;text-decoration:none;text-align:center;font-size:13px;}
+button.primary{flex:1;}
+.small-button{padding:5px 6px;font-size:10px;}
+.danger{background:#b42318;}
+.success{background:#218838;}
+.hidden{display:none;}
+.missing-field{border:2px solid #c0392b!important;background:#fff5f5!important;}
+.lock-badge{font-weight:bold;color:#7a4b00;}
+@page{size:A4 landscape;margin:8mm;}
+@media print{body{background:white;padding:0;}.form-shell{width:100%;min-height:auto;box-shadow:none;padding:0;}.button-row,.role-key,.instruction-box,.owner-box{display:none;}}
 </style>
 </head>
-
 <body>
 <div class="form-shell">
 <form method="POST" action="/add" onsubmit="return validateBeforeSave(event)">
@@ -505,9 +358,7 @@ button.primary{ flex:1; }
 
 <div class="header">
     <div><img src="/IC_Labs_Logo.png" class="logo"></div>
-
     <div class="title">Electronic Chain of Custody Form</div>
-
     <div class="contact">
         <strong>IC Labs Contact Information:</strong><br>
         0211407190<br>
@@ -519,35 +370,46 @@ button.primary{ flex:1; }
 </div>
 
 <div class="role-key">
-    <span><i class="role-dot dot-site"></i> Site fields</span>
-    <span><i class="role-dot dot-driver"></i> Driver fields</span>
-    <span><i class="role-dot dot-lab"></i> Lab fields</span>
+    <span><i class="role-dot dot-site"></i> Site fields ${form.site_locked ? "<span class='lock-badge'>(locked)</span>" : ""}</span>
+    <span><i class="role-dot dot-driver"></i> Driver fields ${form.driver_locked ? "<span class='lock-badge'>(locked)</span>" : ""}</span>
+    <span><i class="role-dot dot-lab"></i> Lab fields ${form.lab_locked ? "<span class='lock-badge'>(locked)</span>" : ""}</span>
 </div>
+
+<div class="instruction-box">
+    <strong>Your section:</strong> ${escapeHtml(roleInstructions(role, form))}
+</div>
+
+${isOwner && form.id ? `
+<div class="owner-box">
+    <span>Owner access: manage which sections can be edited again.</span>
+    <a href="/owner/${form.id}?role=owner">Manage Access</a>
+</div>
+` : ""}
 
 <table>
     <tr>
         <td class="${activeRoleClass(role, "site")}">
             <label>Protocol Name</label>
-            <select name="protocol_name" onchange="toggleOther(this,'protocolOther')" ${disabled(isSite)} ${requiredAttr(role, "site", "Protocol Name")}>
+            <select name="protocol_name" onchange="toggleOther(this,'protocolOther')" ${disabled(canEditSite)} ${requiredAttr(canEditSite, "Protocol Name")}>
                 ${renderOptions(protocolOptions, protocolIsOther ? "Other" : form.protocol_name)}
             </select>
-            ${!isSite ? `<input type="hidden" name="protocol_name" value="${escapeHtml(form.protocol_name || "")}">` : ""}
+            ${!canEditSite ? `<input type="hidden" name="protocol_name" value="${escapeHtml(form.protocol_name || "")}">` : ""}
             <input id="protocolOther" name="protocolOther" class="${protocolIsOther ? "" : "hidden"}" value="${protocolIsOther ? escapeHtml(form.protocol_name) : ""}" placeholder="Enter protocol">
         </td>
 
         <td class="${activeRoleClass(role, "site")}">
             <label>Shipping Date</label>
-            <input type="date" name="shipping_date" value="${escapeHtml(form.shipping_date || todayDate())}" ${readonly(isSite)} ${requiredAttr(role, "site", "Shipping Date")}>
+            <input type="date" name="shipping_date" value="${escapeHtml(form.shipping_date || todayDate())}" ${readonly(canEditSite)} ${requiredAttr(canEditSite, "Shipping Date")}>
         </td>
 
         <td class="${activeRoleClass(role, "driver")}">
             <label>Courier Name</label>
-            <input name="courier_name" value="${escapeHtml(form.courier_name)}" ${readonly(isDriver)} ${requiredAttr(role, "driver", "Courier Name")}>
+            <input name="courier_name" value="${escapeHtml(form.courier_name)}" ${readonly(canEditDriver)} ${requiredAttr(canEditDriver, "Courier Name")}>
         </td>
 
         <td class="${activeRoleClass(role, "site")}">
             <label>Number of Pages</label>
-            <input type="number" name="page_numbers" value="${escapeHtml(form.page_numbers)}" ${readonly(isSite)} ${requiredAttr(role, "site", "Number of Pages")}>
+            <input type="number" name="page_numbers" value="${escapeHtml(form.page_numbers)}" ${readonly(canEditSite)} ${requiredAttr(canEditSite, "Number of Pages")}>
         </td>
     </tr>
 
@@ -555,32 +417,30 @@ button.primary{ flex:1; }
         <td class="${activeRoleClass(role, "site")}">
             <label>Site Name</label>
             <div class="choice-group">
-                ${renderSiteOptions(siteIsOther ? "Other" : form.site_name, isSite)}
+                ${renderSiteOptions(siteIsOther ? "Other" : form.site_name, canEditSite)}
             </div>
-            ${!isSite ? `<input type="hidden" name="site_name" value="${escapeHtml(form.site_name || "")}">` : ""}
+            ${!canEditSite ? `<input type="hidden" name="site_name" value="${escapeHtml(form.site_name || "")}">` : ""}
             <input id="siteOther" name="siteOther" class="${siteIsOther ? "" : "hidden"}" value="${siteIsOther ? escapeHtml(form.site_name) : ""}" placeholder="Enter site">
         </td>
 
         <td class="${activeRoleClass(role, "site")}">
             <label>Shipped By</label>
-            <input name="shipped_by" value="${escapeHtml(form.shipped_by)}" ${readonly(isSite)} placeholder="Name and surname" ${requiredAttr(role, "site", "Shipped By")}>
+            <input name="shipped_by" value="${escapeHtml(form.shipped_by)}" ${readonly(canEditSite)} placeholder="Name and surname" ${requiredAttr(canEditSite, "Shipped By")}>
         </td>
 
         <td class="${activeRoleClass(role, "driver")}">
             <label>Courier Collection Date & Time</label>
-            <input type="datetime-local" name="courier_collection_datetime" value="${escapeHtml(form.courier_collection_datetime)}" ${readonly(isDriver)} ${requiredAttr(role, "driver", "Courier Collection Date & Time")}>
+            <input type="datetime-local" name="courier_collection_datetime" value="${escapeHtml(form.courier_collection_datetime)}" ${readonly(canEditDriver)} ${requiredAttr(canEditDriver, "Courier Collection Date & Time")}>
         </td>
 
         <td class="${activeRoleClass(role, "lab")}">
             <label>Delivery Date & Time</label>
-            <input type="datetime-local" name="delivery_datetime" value="${escapeHtml(form.delivery_datetime)}" ${readonly(isLab)} ${requiredAttr(role, "lab", "Delivery Date & Time")}>
+            <input type="datetime-local" name="delivery_datetime" value="${escapeHtml(form.delivery_datetime)}" ${readonly(canEditLab)} ${requiredAttr(canEditLab, "Delivery Date & Time")}>
         </td>
     </tr>
 
     <tr>
-        <td colspan="4" class="note-cell">
-            Note: This log must physically accompany the samples.
-        </td>
+        <td colspan="4" class="note-cell">Note: This log must physically accompany the samples.</td>
     </tr>
 </table>
 
@@ -588,33 +448,24 @@ button.primary{ flex:1; }
     <div>
         <table class="requisition-box ${activeRoleClass(role, "site")}">
             <tr><th>Requisition Number</th></tr>
-            <tr>
-                <td>
-                    <input name="requisition_number" value="${escapeHtml(form.requisition_number)}" ${readonly(isSite)} ${requiredAttr(role, "site", "Requisition Number")}>
-                </td>
-            </tr>
-
+            <tr><td><input name="requisition_number" value="${escapeHtml(form.requisition_number)}" ${readonly(canEditSite)} ${requiredAttr(canEditSite, "Requisition Number")}></td></tr>
             <tr><th>PID Number</th></tr>
-            <tr>
-                <td>
-                    <input name="pid" value="${escapeHtml(form.pid)}" ${readonly(isSite)} ${requiredAttr(role, "site", "PID Number")}>
-                </td>
-            </tr>
+            <tr><td><input name="pid" value="${escapeHtml(form.pid)}" ${readonly(canEditSite)} ${requiredAttr(canEditSite, "PID Number")}></td></tr>
         </table>
 
         <table class="monitor-table">
             <thead>
                 <tr>
-                    <th class="${activeRoleClass(role, "site")}">Monitor S/N</th>
-                    ${isSite ? `<th>Action</th>` : ""}
+                    <th class="${activeRoleClass(role, "driver")}">Monitor S/N</th>
+                    ${canEditDriver ? `<th>Action</th>` : ""}
                 </tr>
             </thead>
             <tbody id="monitorRows">
-                ${renderMonitorRows(role, monitors)}
+                ${renderMonitorRows(role, monitors, form)}
             </tbody>
         </table>
 
-        ${isSite ? `<button type="button" class="small-button" style="margin-top:6px;width:100%;" onclick="addMonitorRow()">Add Monitor</button>` : ""}
+        ${canEditDriver ? `<button type="button" class="small-button" style="margin-top:6px;width:100%;" onclick="addMonitorRow()">Add Monitor</button>` : ""}
     </div>
 
     <div class="table-scroll">
@@ -631,19 +482,19 @@ button.primary{ flex:1; }
                     <th class="${activeRoleClass(role, "lab")}">Receiver Initial/Date</th>
                     <th class="${activeRoleClass(role, "lab")}">Comments</th>
                     <th class="${activeRoleClass(role, "lab")}">Delivery Temp</th>
-                    ${isSite ? `<th>Action</th>` : ""}
+                    ${canEditSite ? `<th>Action</th>` : ""}
                 </tr>
             </thead>
             <tbody id="sampleRows">
-                ${renderSampleRows(role, rows)}
+                ${renderSampleRows(role, rows, form)}
             </tbody>
         </table>
     </div>
 </div>
 
 <div class="button-row">
-    ${isSite ? `<button type="button" onclick="addSampleRow()">Add Sample Type</button>` : ""}
-    <button class="primary" type="submit">Save eCOC</button>
+    ${canEditSite ? `<button type="button" onclick="addSampleRow()">Add Sample Type</button>` : ""}
+    ${role !== "owner" ? `<button class="primary" type="submit">Save eCOC</button>` : ""}
     ${form.id ? `<a class="button-link success" href="/download/${form.id}">Download PDF</a>` : ""}
 </div>
 
@@ -747,7 +598,7 @@ function addMonitorRow(){
     tr.className = "monitor-row";
 
     tr.innerHTML = \`
-        <td class="${activeRoleClass(role, "site")}">
+        <td class="${activeRoleClass(role, "driver")}">
             <input name="monitor_sn[]" data-required-label="Monitor S/N">
         </td>
         <td class="action-cell">
@@ -764,7 +615,7 @@ function removeMonitorRow(button){
     button.closest("tr").remove();
 }
 
-function validateBeforeSave(event){
+function validateBeforeSave(){
     document.querySelectorAll(".missing-field").forEach(el => el.classList.remove("missing-field"));
 
     const fields = Array.from(document.querySelectorAll("[data-required-label]"))
@@ -800,7 +651,6 @@ function validateBeforeSave(event){
     return confirm(message);
 }
 </script>
-
 </body>
 </html>
 `;
@@ -876,10 +726,7 @@ function saveMonitors(formId, d, callback) {
     db.run("DELETE FROM coc_monitors WHERE form_id = ?", [formId], err => {
         if (err) return callback(err);
 
-        const stmt = db.prepare(`
-            INSERT INTO coc_monitors (form_id,row_order,monitor_sn)
-            VALUES (?,?,?)
-        `);
+        const stmt = db.prepare("INSERT INTO coc_monitors (form_id,row_order,monitor_sn) VALUES (?,?,?)");
 
         monitorSns.forEach((monitorSn, index) => {
             if (String(monitorSn || "").trim()) {
@@ -964,6 +811,19 @@ function mergeRowsForRole(role, d, existingRows) {
     return rows;
 }
 
+function lockRoleSection(formId, role, callback) {
+    const lockMap = {
+        site: "site_locked",
+        driver: "driver_locked",
+        lab: "lab_locked"
+    };
+
+    const column = lockMap[role];
+    if (!column) return callback();
+
+    db.run(`UPDATE coc_forms SET ${column}=1 WHERE id=?`, [formId], callback);
+}
+
 async function generatePdf(formId) {
     return new Promise((resolve, reject) => {
         getFormWithRows(formId, async (err, form, rows, monitors) => {
@@ -987,12 +847,9 @@ async function generatePdf(formId) {
             const text = "#202833";
 
             function cell(x, y, w, h, label, value, options = {}) {
-                const fill = options.fill || "#ffffff";
-                doc.rect(x, y, w, h).fillAndStroke(fill, border);
-                doc.fillColor(navy).font("Helvetica-Bold").fontSize(6.5)
-                    .text(label, x + 4, y + 4, { width: w - 8 });
-                doc.fillColor(text).font("Helvetica").fontSize(options.valueSize || 7.5)
-                    .text(value || "-", x + 4, y + 16, { width: w - 8, height: h - 18 });
+                doc.rect(x, y, w, h).fillAndStroke(options.fill || "#ffffff", border);
+                doc.fillColor(navy).font("Helvetica-Bold").fontSize(6.5).text(label, x + 4, y + 4, { width: w - 8 });
+                doc.fillColor(text).font("Helvetica").fontSize(options.valueSize || 7.5).text(value || "-", x + 4, y + 16, { width: w - 8, height: h - 18 });
             }
 
             function tableHeader(x, y, widths, headers) {
@@ -1014,16 +871,14 @@ async function generatePdf(formId) {
                 doc.image(logoPath, 26, 8, { width: 72 });
             }
 
-            doc.fillColor(navy).font("Helvetica-Bold").fontSize(17)
-                .text("Electronic Chain of Custody Form", 0, 26, { align: "center" });
+            doc.fillColor(navy).font("Helvetica-Bold").fontSize(17).text("Electronic Chain of Custody Form", 0, 26, { align: "center" });
 
-            doc.fillColor(text).font("Helvetica").fontSize(7)
-                .text(
-                    "IC Labs Contact Information:\n0211407190 | info@iclabs.co.za\nGround Floor Albion Springs\n183 Main Road, Rondebosch\nCape Town, Western Cape, South Africa",
-                    585,
-                    16,
-                    { width: 230, align: "right", lineGap: 1 }
-                );
+            doc.fillColor(text).font("Helvetica").fontSize(7).text(
+                "IC Labs Contact Information:\n0211407190 | info@iclabs.co.za\nGround Floor Albion Springs\n183 Main Road, Rondebosch\nCape Town, Western Cape, South Africa",
+                585,
+                16,
+                { width: 230, align: "right", lineGap: 1 }
+            );
 
             try {
                 const pngBuffer = await bwipjs.toBuffer({
@@ -1037,8 +892,7 @@ async function generatePdf(formId) {
                 doc.image(pngBuffer, 681, 84, { width: 110 });
             } catch (e) {}
 
-            doc.fillColor(navy).font("Helvetica-Bold").fontSize(8)
-                .text(`Document Ref: ${docRefNum}`, 24, 86);
+            doc.fillColor(navy).font("Helvetica-Bold").fontSize(8).text(`Document Ref: ${docRefNum}`, 24, 86);
 
             const startY = 108;
             const cellW = 197;
@@ -1065,24 +919,16 @@ async function generatePdf(formId) {
 
             const tableX = 166;
             let tableY = reqY;
-
-            const headers = [
-                "Sample Type", "Ship Temp", "Tubes Sent", "Collection Date/Time", "Visit",
-                "Pickup Temp", "Tubes Rec.", "Receiver Initial/Date", "Comments", "Delivery Temp"
-            ];
-
+            const headers = ["Sample Type", "Ship Temp", "Tubes Sent", "Collection Date/Time", "Visit", "Pickup Temp", "Tubes Rec.", "Receiver Initial/Date", "Comments", "Delivery Temp"];
             const widths = [82, 68, 48, 92, 40, 56, 48, 82, 86, 50];
 
             tableHeader(tableX, tableY, widths, headers);
             tableY += 24;
 
-            doc.font("Helvetica").fontSize(5.6).fillColor(text);
-
             rows.forEach((row, index) => {
                 let x = tableX;
                 const rowH = 29;
                 const fill = index % 2 === 0 ? "#ffffff" : "#f8fafc";
-
                 const values = [
                     row.sample_type,
                     row.shipping_temp,
@@ -1098,8 +944,7 @@ async function generatePdf(formId) {
 
                 values.forEach((value, i) => {
                     doc.rect(x, tableY, widths[i], rowH).fillAndStroke(fill, border);
-                    doc.fillColor(text).font("Helvetica").fontSize(5.6)
-                        .text(value || "-", x + 2, tableY + 5, { width: widths[i] - 4, height: rowH - 8 });
+                    doc.fillColor(text).font("Helvetica").fontSize(5.6).text(value || "-", x + 2, tableY + 5, { width: widths[i] - 4, height: rowH - 8 });
                     x += widths[i];
                 });
 
@@ -1108,11 +953,12 @@ async function generatePdf(formId) {
 
             const footerY = 560;
             doc.moveTo(24, footerY).lineTo(doc.page.width - 24, footerY).strokeColor(border).stroke();
-            doc.fillColor("#5b6775").font("Helvetica").fontSize(6.5)
-                .text("Generated electronically by IC Labs eCOC system. Review all entered details before releasing samples.", 24, footerY + 8, {
-                    width: doc.page.width - 48,
-                    align: "center"
-                });
+            doc.fillColor("#5b6775").font("Helvetica").fontSize(6.5).text(
+                "Generated electronically by IC Labs eCOC system. Review all entered details before releasing samples.",
+                24,
+                footerY + 8,
+                { width: doc.page.width - 48, align: "center" }
+            );
 
             doc.end();
 
@@ -1122,105 +968,53 @@ async function generatePdf(formId) {
     });
 }
 
-app.get("/", (req, res) => res.redirect("/login"));
-
-app.get("/login", (req, res) => {
-    res.send(`
+function renderAuthCard(title, bodyHtml) {
+    return `
 <html>
 <head>
-<title>IC Labs eCOC Login</title>
+<title>${escapeHtml(title)}</title>
 <style>
-body{
-    font-family:Arial, sans-serif;
-    margin:0;
-    min-height:100vh;
-    background:linear-gradient(135deg,#eef4f8,#d9e4ec);
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    color:#1f2933;
-}
-
-.login-card{
-    width:360px;
-    background:white;
-    padding:34px;
-    border-radius:10px;
-    box-shadow:0 12px 30px rgba(31,58,95,0.18);
-    text-align:center;
-}
-
-.logo{
-    width:150px;
-    margin-bottom:12px;
-}
-
-h1{
-    font-size:22px;
-    margin:8px 0 4px;
-    color:#1f3a5f;
-}
-
-p{
-    margin:0 0 24px;
-    font-size:13px;
-    color:#5b6775;
-}
-
-label{
-    display:block;
-    text-align:left;
-    font-size:13px;
-    font-weight:bold;
-    margin:12px 0 5px;
-}
-
-input,select{
-    width:100%;
-    box-sizing:border-box;
-    padding:10px;
-    border:1px solid #b7c0ca;
-    border-radius:5px;
-    font-size:14px;
-}
-
-button{
-    width:100%;
-    margin-top:20px;
-    padding:11px;
-    background:#1f3a5f;
-    color:white;
-    border:none;
-    border-radius:5px;
-    cursor:pointer;
-    font-size:15px;
-    font-weight:bold;
-}
+body{font-family:Arial,sans-serif;margin:0;min-height:100vh;background:linear-gradient(135deg,#eef4f8,#d9e4ec);display:flex;align-items:center;justify-content:center;color:#1f2933;}
+.card{width:390px;background:white;padding:34px;border-radius:10px;box-shadow:0 12px 30px rgba(31,58,95,.18);text-align:center;}
+.logo{width:150px;margin-bottom:12px;}
+h1{font-size:22px;margin:8px 0 4px;color:#1f3a5f;}
+p{margin:0 0 24px;font-size:13px;color:#5b6775;}
+label{display:block;text-align:left;font-size:13px;font-weight:bold;margin:12px 0 5px;}
+input,select{width:100%;box-sizing:border-box;padding:10px;border:1px solid #b7c0ca;border-radius:5px;font-size:14px;}
+button,.link-button{display:block;box-sizing:border-box;width:100%;margin-top:14px;padding:11px;background:#1f3a5f;color:white;border:none;border-radius:5px;cursor:pointer;font-size:15px;font-weight:bold;text-decoration:none;}
+.secondary{background:#eef4fb;color:#1f3a5f;border:1px solid #c9d8e8;}
+hr{border:none;border-top:1px solid #e1e7ef;margin:24px 0;}
 </style>
 </head>
 <body>
-<div class="login-card">
-    <img src="/IC_Labs_Logo.png" class="logo">
-    <h1>IC Labs eCOC Login</h1>
-    <p>Electronic Chain of Custody Access</p>
-
-    <form method="POST" action="/login">
-        <label>Role</label>
-        <select name="role">
-            <option value="site">Site</option>
-            <option value="driver">Driver</option>
-            <option value="lab">Lab</option>
-        </select>
-
-        <label>Password</label>
-        <input type="password" name="password">
-
-        <button type="submit">Sign In</button>
-    </form>
+<div class="card">
+<img src="/IC_Labs_Logo.png" class="logo">
+${bodyHtml}
 </div>
 </body>
 </html>
-`);
+`;
+}
+
+app.get("/", (req, res) => res.redirect("/login"));
+
+app.get("/login", (req, res) => {
+    res.send(renderAuthCard("IC Labs eCOC Login", `
+        <h1>IC Labs eCOC Login</h1>
+        <p>Electronic Chain of Custody Access</p>
+        <form method="POST" action="/login">
+            <label>Role</label>
+            <select name="role">
+                <option value="site">Site</option>
+                <option value="driver">Driver</option>
+                <option value="lab">Lab</option>
+                <option value="owner">Owner</option>
+            </select>
+            <label>Password</label>
+            <input type="password" name="password">
+            <button type="submit">Sign In</button>
+        </form>
+    `));
 });
 
 app.post("/login", (req, res) => {
@@ -1230,54 +1024,45 @@ app.post("/login", (req, res) => {
         return res.redirect(`/search?role=${role}`);
     }
 
-    res.send(`<h3>Invalid role or password. <a href="/login">Try again</a></h3>`);
+    res.send(renderAuthCard("Login Failed", `
+        <h1>Login Failed</h1>
+        <p>Invalid role or password.</p>
+        <a class="link-button" href="/login">Try Again</a>
+    `));
 });
 
 app.get("/search", (req, res) => {
     const role = req.query.role || "site";
 
-    if (!["site", "driver", "lab"].includes(role)) {
-        return res.redirect("/login");
-    }
+    if (!roles.includes(role)) return res.redirect("/login");
 
-    res.send(`
-<html>
-<head>
-<title>eCOC Options</title>
-<style>
-body{font-family:Arial;padding:50px;text-align:center;background:#f4f6f9;}
-input,button{padding:10px;margin:10px;width:260px;}
-button{background:#2c3e50;color:white;border:none;border-radius:5px;cursor:pointer;}
-hr{margin:30px 0;}
-</style>
-</head>
-<body>
-<h2>eCOC Options</h2>
+    res.send(renderAuthCard("eCOC Options", `
+        <h1>eCOC Options</h1>
+        <p>${escapeHtml(role.toUpperCase())} access</p>
 
-<form method="GET" action="/load">
-<label>Load Existing eCOC</label><br>
-<input name="reqnum" placeholder="Enter Requisition Number"><br>
-<input type="hidden" name="role" value="${escapeHtml(role)}">
-<button type="submit">Load Form</button>
-</form>
+        <form method="GET" action="/load">
+            <label>Load Existing eCOC</label>
+            <input name="reqnum" placeholder="Enter Requisition Number">
+            <input type="hidden" name="role" value="${escapeHtml(role)}">
+            <button type="submit">Load Form</button>
+        </form>
 
-<hr>
+        ${role === "site" ? `
+            <hr>
+            <form method="GET" action="/form">
+                <input type="hidden" name="role" value="${escapeHtml(role)}">
+                <button type="submit">Start New eCOC</button>
+            </form>
+        ` : ""}
 
-<form method="GET" action="/form">
-<input type="hidden" name="role" value="${escapeHtml(role)}">
-<button type="submit">Start New eCOC</button>
-</form>
-
-<p><a href="/view-pdfs">View Generated PDFs</a></p>
-</body>
-</html>
-`);
+        <a class="link-button secondary" href="/view-pdfs">View Generated PDFs</a>
+    `));
 });
 
 app.get("/load", (req, res) => {
     const { reqnum, role } = req.query;
 
-    if (!reqnum || !role || !["site", "driver", "lab"].includes(role)) {
+    if (!reqnum || !roles.includes(role)) {
         return res.send("Invalid requisition number or role");
     }
 
@@ -1300,11 +1085,10 @@ app.get("/form", (req, res) => {
     const role = req.query.role;
     const newReq = req.query.newReq;
 
-    if (!role || !["site", "driver", "lab"].includes(role)) {
-        return res.redirect("/login");
-    }
+    if (!roles.includes(role)) return res.redirect("/login");
+    if (role !== "site") return res.send("Only the site role can start a new eCOC.");
 
-    const form = newReq ? { requisition_number: newReq } : {};
+    const form = newReq ? { requisition_number: newReq, site_locked: 0, driver_locked: 0, lab_locked: 0 } : { site_locked: 0, driver_locked: 0, lab_locked: 0 };
     res.send(renderForm(role, form, [{}], [{}]));
 });
 
@@ -1312,9 +1096,7 @@ app.get("/form/:id", (req, res) => {
     const role = req.query.role;
     const id = req.params.id;
 
-    if (!role || !["site", "driver", "lab"].includes(role)) {
-        return res.redirect("/login");
-    }
+    if (!roles.includes(role)) return res.redirect("/login");
 
     getFormWithRows(id, (err, form, rows, monitors) => {
         if (err) return res.send("Record not found");
@@ -1326,9 +1108,7 @@ app.post("/add", (req, res) => {
     const d = req.body;
     const role = d.role;
 
-    if (!["site", "driver", "lab"].includes(role)) {
-        return res.send("Invalid role");
-    }
+    if (!["site", "driver", "lab"].includes(role)) return res.send("Invalid role");
 
     const protocol = d.protocol_name === "Other" ? d.protocolOther : d.protocol_name;
     const site = d.site_name === "Other" ? d.siteOther : d.site_name;
@@ -1336,6 +1116,12 @@ app.post("/add", (req, res) => {
     if (d.id) {
         getFormWithRows(d.id, (err, existingForm, existingRows) => {
             if (err) return res.send("Record not found");
+
+            if ((role === "site" && existingForm.site_locked) ||
+                (role === "driver" && existingForm.driver_locked) ||
+                (role === "lab" && existingForm.lab_locked)) {
+                return res.send("This section is locked. Please contact the owner to allow edits.");
+            }
 
             const updatedForm = {
                 protocol_name: role === "site" ? protocol : existingForm.protocol_name,
@@ -1384,39 +1170,41 @@ app.post("/add", (req, res) => {
                 saveRowsDirectly(d.id, mergedRows, rowErr => {
                     if (rowErr) return res.send("Sample Row Error: " + rowErr.message);
 
-                    const finish = async () => {
-                        try {
-                            await generatePdf(d.id);
-                        } catch (pdfErr) {
-                            console.error(pdfErr);
-                        }
+                    const afterMonitor = () => {
+                        lockRoleSection(d.id, role, async lockErr => {
+                            if (lockErr) return res.send("Lock Error: " + lockErr.message);
 
-                        res.redirect(`/form/${d.id}?role=${role}`);
+                            try {
+                                await generatePdf(d.id);
+                            } catch (pdfErr) {
+                                console.error(pdfErr);
+                            }
+
+                            res.redirect(`/form/${d.id}?role=${role}`);
+                        });
                     };
 
-                    if (role === "site") {
+                    if (role === "driver") {
                         saveMonitors(d.id, d, monitorErr => {
                             if (monitorErr) return res.send("Monitor Error: " + monitorErr.message);
-                            finish();
+                            afterMonitor();
                         });
                     } else {
-                        finish();
+                        afterMonitor();
                     }
                 });
             });
         });
     } else {
-        if (role !== "site") {
-            return res.send("Only the site role can start a new eCOC.");
-        }
+        if (role !== "site") return res.send("Only the site role can start a new eCOC.");
 
         db.run(`
             INSERT INTO coc_forms (
                 protocol_name,site_name,shipping_date,courier_name,
                 page_numbers,shipped_by,courier_collection_datetime,delivery_datetime,
-                requisition_number,pid
+                requisition_number,pid,site_locked,driver_locked,lab_locked
             )
-            VALUES (?,?,?,?,?,?,?,?,?,?)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
         `, [
             protocol,
             site,
@@ -1427,29 +1215,80 @@ app.post("/add", (req, res) => {
             d.courier_collection_datetime,
             d.delivery_datetime,
             d.requisition_number,
-            d.pid
+            d.pid,
+            1,
+            0,
+            0
         ], function(err) {
             if (err) return res.send("DB Error: " + err.message);
 
             const formId = this.lastID;
 
-            saveSampleRows(formId, d, sampleErr => {
+            saveSampleRows(formId, d, async sampleErr => {
                 if (sampleErr) return res.send("Sample Row Error: " + sampleErr.message);
 
-                saveMonitors(formId, d, async monitorErr => {
-                    if (monitorErr) return res.send("Monitor Error: " + monitorErr.message);
+                try {
+                    await generatePdf(formId);
+                } catch (pdfErr) {
+                    console.error(pdfErr);
+                }
 
-                    try {
-                        await generatePdf(formId);
-                    } catch (pdfErr) {
-                        console.error(pdfErr);
-                    }
-
-                    res.redirect(`/form/${formId}?role=${role}`);
-                });
+                res.redirect(`/form/${formId}?role=${role}`);
             });
         });
     }
+});
+
+app.get("/owner/:id", (req, res) => {
+    const id = req.params.id;
+    const role = req.query.role;
+
+    if (role !== "owner") return res.redirect("/login");
+
+    db.get("SELECT * FROM coc_forms WHERE id = ?", [id], (err, form) => {
+        if (err || !form) return res.send("Record not found");
+
+        res.send(renderAuthCard("Owner Access Control", `
+            <h1>Owner Access Control</h1>
+            <p>Requisition: ${escapeHtml(form.requisition_number || "-")}</p>
+
+            <form method="POST" action="/owner/${id}/access">
+                <input type="hidden" name="role" value="owner">
+
+                <label><input type="checkbox" name="allow_site" ${form.site_locked ? "" : "checked"} style="width:auto;"> Allow Site to edit</label>
+                <label><input type="checkbox" name="allow_driver" ${form.driver_locked ? "" : "checked"} style="width:auto;"> Allow Driver to edit</label>
+                <label><input type="checkbox" name="allow_lab" ${form.lab_locked ? "" : "checked"} style="width:auto;"> Allow Lab to edit</label>
+
+                <button type="submit">Update Access</button>
+            </form>
+
+            <a class="link-button secondary" href="/form/${id}?role=owner">Back to Form</a>
+        `));
+    });
+});
+
+app.post("/owner/:id/access", (req, res) => {
+    const id = req.params.id;
+    const d = req.body;
+
+    if (d.role !== "owner") return res.redirect("/login");
+
+    db.run(`
+        UPDATE coc_forms SET
+            site_locked=?,
+            driver_locked=?,
+            lab_locked=?,
+            updated_at=CURRENT_TIMESTAMP
+        WHERE id=?
+    `, [
+        d.allow_site ? 0 : 1,
+        d.allow_driver ? 0 : 1,
+        d.allow_lab ? 0 : 1,
+        id
+    ], err => {
+        if (err) return res.send("Access update error: " + err.message);
+        res.redirect(`/form/${id}?role=owner`);
+    });
 });
 
 app.get("/view-pdfs", (req, res) => {
