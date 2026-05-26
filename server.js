@@ -37,6 +37,14 @@ const sampleTypeOptions = [
     "Spot Sputum"
 ];
 
+const shippingTempOptions = [
+    "Ambient 15-25",
+    "Refrigerated 2-8",
+    "Frozen -80",
+    "LN2 -196",
+    "Other"
+];
+
 const db = new sqlite3.Database("./ecoc.db");
 
 db.serialize(() => {
@@ -59,15 +67,11 @@ db.serialize(() => {
     `);
 
     db.run("ALTER TABLE coc_forms ADD COLUMN pid TEXT", err => {
-        if (err && !err.message.includes("duplicate column name")) {
-            console.error("PID column error:", err.message);
-        }
+        if (err && !err.message.includes("duplicate column name")) console.error("PID column error:", err.message);
     });
 
     db.run("ALTER TABLE coc_forms ADD COLUMN delivery_datetime TEXT", err => {
-        if (err && !err.message.includes("duplicate column name")) {
-            console.error("Delivery datetime column error:", err.message);
-        }
+        if (err && !err.message.includes("duplicate column name")) console.error("Delivery datetime column error:", err.message);
     });
 
     db.run(`
@@ -76,7 +80,8 @@ db.serialize(() => {
             form_id INTEGER,
             row_order INTEGER,
             sample_type TEXT,
-            shipping_temp REAL,
+            shipping_temp TEXT,
+            shipping_temp_other TEXT,
             tubes_sent INTEGER,
             sample_collection_datetime TEXT,
             visit TEXT,
@@ -85,6 +90,20 @@ db.serialize(() => {
             receiver_initial_date TEXT,
             comments TEXT,
             delivery_temp REAL,
+            FOREIGN KEY(form_id) REFERENCES coc_forms(id)
+        )
+    `);
+
+    db.run("ALTER TABLE coc_sample_rows ADD COLUMN shipping_temp_other TEXT", err => {
+        if (err && !err.message.includes("duplicate column name")) console.error("Shipping temp other column error:", err.message);
+    });
+
+    db.run(`
+        CREATE TABLE IF NOT EXISTS coc_monitors (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            form_id INTEGER,
+            row_order INTEGER,
+            monitor_sn TEXT,
             FOREIGN KEY(form_id) REFERENCES coc_forms(id)
         )
     `);
@@ -132,6 +151,10 @@ function activeRoleClass(currentRole, fieldRole) {
     return currentRole === fieldRole ? `active-${fieldRole}` : "";
 }
 
+function requiredAttr(currentRole, fieldRole, label) {
+    return currentRole === fieldRole ? `data-required-label="${escapeHtml(label)}"` : "";
+}
+
 function renderOptions(options, currentValue) {
     return options.map(option => {
         return `<option value="${escapeHtml(option)}" ${selected(currentValue, option)}>${escapeHtml(option)}</option>`;
@@ -142,11 +165,29 @@ function renderSiteOptions(currentValue, canEdit) {
     return siteOptions.map(site => {
         return `
             <label class="choice-line">
-                <input type="radio" name="site_name" value="${escapeHtml(site)}" ${checked(currentValue, site)} ${disabled(canEdit)}>
+                <input type="radio" name="site_name" value="${escapeHtml(site)}" ${checked(currentValue, site)} ${disabled(canEdit)} ${canEdit ? `data-required-label="Site Name"` : ""}>
                 <span>${escapeHtml(site)}</span>
             </label>
         `;
     }).join("");
+}
+
+function renderMonitorRows(role, monitors) {
+    const isSite = role === "site";
+    const usableMonitors = monitors.length ? monitors : [{}];
+
+    return usableMonitors.map(monitor => `
+        <tr class="monitor-row">
+            <td class="${activeRoleClass(role, "site")}">
+                <input name="monitor_sn[]" value="${escapeHtml(monitor.monitor_sn)}" ${readonly(isSite)} ${requiredAttr(role, "site", "Monitor S/N")}>
+            </td>
+            ${isSite ? `
+                <td class="action-cell">
+                    <button type="button" class="small-button danger" onclick="removeMonitorRow(this)">Remove</button>
+                </td>
+            ` : ""}
+        </tr>
+    `).join("");
 }
 
 function renderSampleRows(role, rows) {
@@ -156,26 +197,35 @@ function renderSampleRows(role, rows) {
     const usableRows = rows.length ? rows : [{}];
 
     return usableRows.map(row => {
+        const tempIsOther = row.shipping_temp && !shippingTempOptions.includes(row.shipping_temp);
+
         return `
             <tr class="sample-row">
                 <td class="${activeRoleClass(role, "site")}">
-                    <select name="sample_type[]" ${disabled(isSite)}>
+                    <select name="sample_type[]" ${disabled(isSite)} ${requiredAttr(role, "site", "Sample Type")}>
                         ${renderOptions(sampleTypeOptions, row.sample_type)}
                     </select>
                     ${!isSite ? `<input type="hidden" name="sample_type[]" value="${escapeHtml(row.sample_type || "")}">` : ""}
                 </td>
 
-                <td class="${activeRoleClass(role, "site")}"><input type="number" step="0.1" name="shipping_temp[]" value="${escapeHtml(row.shipping_temp)}" ${readonly(isSite)}></td>
-                <td class="${activeRoleClass(role, "site")}"><input type="number" name="tubes_sent[]" value="${escapeHtml(row.tubes_sent)}" ${readonly(isSite)}></td>
-                <td class="${activeRoleClass(role, "site")}"><input type="datetime-local" name="sample_collection_datetime[]" value="${escapeHtml(row.sample_collection_datetime)}" ${readonly(isSite)}></td>
-                <td class="${activeRoleClass(role, "site")}"><input name="visit[]" value="${escapeHtml(row.visit)}" ${readonly(isSite)}></td>
+                <td class="${activeRoleClass(role, "site")}">
+                    <select name="shipping_temp[]" onchange="toggleRowOther(this)" ${disabled(isSite)} ${requiredAttr(role, "site", "Shipping Temperature")}>
+                        ${renderOptions(shippingTempOptions, tempIsOther ? "Other" : row.shipping_temp)}
+                    </select>
+                    ${!isSite ? `<input type="hidden" name="shipping_temp[]" value="${escapeHtml(row.shipping_temp || "")}">` : ""}
+                    <input name="shipping_temp_other[]" class="${tempIsOther ? "" : "hidden"}" value="${tempIsOther ? escapeHtml(row.shipping_temp) : escapeHtml(row.shipping_temp_other)}" placeholder="Enter temp condition">
+                </td>
 
-                <td class="${activeRoleClass(role, "driver")}"><input type="number" step="0.1" name="courier_pickup_temp[]" value="${escapeHtml(row.courier_pickup_temp)}" ${readonly(isDriver)}></td>
+                <td class="${activeRoleClass(role, "site")}"><input type="number" name="tubes_sent[]" value="${escapeHtml(row.tubes_sent)}" ${readonly(isSite)} ${requiredAttr(role, "site", "Tubes Sent")}></td>
+                <td class="${activeRoleClass(role, "site")}"><input type="datetime-local" name="sample_collection_datetime[]" value="${escapeHtml(row.sample_collection_datetime)}" ${readonly(isSite)} ${requiredAttr(role, "site", "Sample Collection Date/Time")}></td>
+                <td class="${activeRoleClass(role, "site")}"><input name="visit[]" value="${escapeHtml(row.visit)}" ${readonly(isSite)} ${requiredAttr(role, "site", "Visit")}></td>
 
-                <td class="${activeRoleClass(role, "lab")}"><input type="number" name="tubes_received[]" value="${escapeHtml(row.tubes_received)}" ${readonly(isLab)}></td>
-                <td class="${activeRoleClass(role, "lab")}"><input name="receiver_initial_date[]" value="${escapeHtml(row.receiver_initial_date)}" ${readonly(isLab)}></td>
+                <td class="${activeRoleClass(role, "driver")}"><input type="number" step="0.1" name="courier_pickup_temp[]" value="${escapeHtml(row.courier_pickup_temp)}" ${readonly(isDriver)} ${requiredAttr(role, "driver", "Pickup Temperature")}></td>
+
+                <td class="${activeRoleClass(role, "lab")}"><input type="number" name="tubes_received[]" value="${escapeHtml(row.tubes_received)}" ${readonly(isLab)} ${requiredAttr(role, "lab", "Tubes Received")}></td>
+                <td class="${activeRoleClass(role, "lab")}"><input name="receiver_initial_date[]" value="${escapeHtml(row.receiver_initial_date)}" ${readonly(isLab)} ${requiredAttr(role, "lab", "Receiver Initial/Date")}></td>
                 <td class="${activeRoleClass(role, "lab")}"><input name="comments[]" value="${escapeHtml(row.comments)}" ${readonly(isLab)}></td>
-                <td class="${activeRoleClass(role, "lab")}"><input type="number" step="0.1" name="delivery_temp[]" value="${escapeHtml(row.delivery_temp)}" ${readonly(isLab)}></td>
+                <td class="${activeRoleClass(role, "lab")}"><input type="number" step="0.1" name="delivery_temp[]" value="${escapeHtml(row.delivery_temp)}" ${readonly(isLab)} ${requiredAttr(role, "lab", "Delivery Temperature")}></td>
 
                 ${isSite ? `
                     <td class="action-cell">
@@ -187,7 +237,7 @@ function renderSampleRows(role, rows) {
     }).join("");
 }
 
-function renderForm(role, form = {}, rows = []) {
+function renderForm(role, form = {}, rows = [], monitors = []) {
     const isSite = role === "site";
     const isDriver = role === "driver";
     const isLab = role === "lab";
@@ -228,9 +278,7 @@ body{
     margin-bottom:10px;
 }
 
-.logo{
-    width:135px;
-}
+.logo{ width:135px; }
 
 .title{
     text-align:center;
@@ -280,21 +328,11 @@ input,select,textarea{
     font-size:11px;
 }
 
-input[readonly]{
-    background:#f1f3f5;
-}
+input[readonly]{ background:#f1f3f5; }
 
-.active-site{
-    background:#dff0ff;
-}
-
-.active-driver{
-    background:#fff2b8;
-}
-
-.active-lab{
-    background:#dff8e8;
-}
+.active-site{ background:#dff0ff; }
+.active-driver{ background:#fff2b8; }
+.active-lab{ background:#dff8e8; }
 
 .role-key{
     display:flex;
@@ -317,17 +355,9 @@ input[readonly]{
     display:inline-block;
 }
 
-.dot-site{
-    background:#dff0ff;
-}
-
-.dot-driver{
-    background:#fff2b8;
-}
-
-.dot-lab{
-    background:#dff8e8;
-}
+.dot-site{ background:#dff0ff; }
+.dot-driver{ background:#fff2b8; }
+.dot-lab{ background:#dff8e8; }
 
 .choice-group{
     border:1px solid #b7c0ca;
@@ -364,26 +394,23 @@ input[readonly]{
     align-items:start;
 }
 
-.requisition-box{
-    min-height:150px;
+.requisition-box{ min-height:150px; }
+
+.monitor-table th,
+.monitor-table td{
+    font-size:10px;
 }
 
-.table-scroll{
-    overflow:visible;
-}
+.table-scroll{ overflow:visible; }
 
-.sample-table{
-    table-layout:fixed;
-}
+.sample-table{ table-layout:fixed; }
 
 .sample-table th{
     font-size:9px;
     line-height:1.1;
 }
 
-.sample-table td{
-    padding:3px;
-}
+.sample-table td{ padding:3px; }
 
 .sample-table input,
 .sample-table select{
@@ -393,14 +420,14 @@ input[readonly]{
 }
 
 .sample-table th:nth-child(1){width:90px;}
-.sample-table th:nth-child(2){width:55px;}
-.sample-table th:nth-child(3){width:55px;}
+.sample-table th:nth-child(2){width:70px;}
+.sample-table th:nth-child(3){width:50px;}
 .sample-table th:nth-child(4){width:95px;}
 .sample-table th:nth-child(5){width:45px;}
-.sample-table th:nth-child(6){width:65px;}
-.sample-table th:nth-child(7){width:55px;}
-.sample-table th:nth-child(8){width:85px;}
-.sample-table th:nth-child(9){width:85px;}
+.sample-table th:nth-child(6){width:60px;}
+.sample-table th:nth-child(7){width:50px;}
+.sample-table th:nth-child(8){width:82px;}
+.sample-table th:nth-child(9){width:80px;}
 .sample-table th:nth-child(10){width:55px;}
 .sample-table th:nth-child(11){width:55px;}
 
@@ -427,25 +454,21 @@ button,.button-link{
     font-size:13px;
 }
 
-button.primary{
-    flex:1;
-}
+button.primary{ flex:1; }
 
 .small-button{
     padding:5px 6px;
     font-size:10px;
 }
 
-.danger{
-    background:#b42318;
-}
+.danger{ background:#b42318; }
+.success{ background:#218838; }
 
-.success{
-    background:#218838;
-}
+.hidden{ display:none; }
 
-.hidden{
-    display:none;
+.missing-field{
+    border:2px solid #c0392b !important;
+    background:#fff5f5 !important;
 }
 
 @page{
@@ -476,7 +499,7 @@ button.primary{
 
 <body>
 <div class="form-shell">
-<form method="POST" action="/add">
+<form method="POST" action="/add" onsubmit="return validateBeforeSave(event)">
 <input type="hidden" name="id" value="${escapeHtml(form.id)}">
 <input type="hidden" name="role" value="${escapeHtml(role)}">
 
@@ -505,7 +528,7 @@ button.primary{
     <tr>
         <td class="${activeRoleClass(role, "site")}">
             <label>Protocol Name</label>
-            <select name="protocol_name" onchange="toggleOther(this,'protocolOther')" ${disabled(isSite)}>
+            <select name="protocol_name" onchange="toggleOther(this,'protocolOther')" ${disabled(isSite)} ${requiredAttr(role, "site", "Protocol Name")}>
                 ${renderOptions(protocolOptions, protocolIsOther ? "Other" : form.protocol_name)}
             </select>
             ${!isSite ? `<input type="hidden" name="protocol_name" value="${escapeHtml(form.protocol_name || "")}">` : ""}
@@ -514,17 +537,17 @@ button.primary{
 
         <td class="${activeRoleClass(role, "site")}">
             <label>Shipping Date</label>
-            <input type="date" name="shipping_date" value="${escapeHtml(form.shipping_date || todayDate())}" ${readonly(isSite)}>
+            <input type="date" name="shipping_date" value="${escapeHtml(form.shipping_date || todayDate())}" ${readonly(isSite)} ${requiredAttr(role, "site", "Shipping Date")}>
         </td>
 
         <td class="${activeRoleClass(role, "driver")}">
             <label>Courier Name</label>
-            <input name="courier_name" value="${escapeHtml(form.courier_name)}" ${readonly(isDriver)}>
+            <input name="courier_name" value="${escapeHtml(form.courier_name)}" ${readonly(isDriver)} ${requiredAttr(role, "driver", "Courier Name")}>
         </td>
 
         <td class="${activeRoleClass(role, "site")}">
             <label>Number of Pages</label>
-            <input type="number" name="page_numbers" value="${escapeHtml(form.page_numbers)}" ${readonly(isSite)}>
+            <input type="number" name="page_numbers" value="${escapeHtml(form.page_numbers)}" ${readonly(isSite)} ${requiredAttr(role, "site", "Number of Pages")}>
         </td>
     </tr>
 
@@ -540,17 +563,17 @@ button.primary{
 
         <td class="${activeRoleClass(role, "site")}">
             <label>Shipped By</label>
-            <input name="shipped_by" value="${escapeHtml(form.shipped_by)}" ${readonly(isSite)} placeholder="Name and surname">
+            <input name="shipped_by" value="${escapeHtml(form.shipped_by)}" ${readonly(isSite)} placeholder="Name and surname" ${requiredAttr(role, "site", "Shipped By")}>
         </td>
 
         <td class="${activeRoleClass(role, "driver")}">
             <label>Courier Collection Date & Time</label>
-            <input type="datetime-local" name="courier_collection_datetime" value="${escapeHtml(form.courier_collection_datetime)}" ${readonly(isDriver)}>
+            <input type="datetime-local" name="courier_collection_datetime" value="${escapeHtml(form.courier_collection_datetime)}" ${readonly(isDriver)} ${requiredAttr(role, "driver", "Courier Collection Date & Time")}>
         </td>
 
         <td class="${activeRoleClass(role, "lab")}">
             <label>Delivery Date & Time</label>
-            <input type="datetime-local" name="delivery_datetime" value="${escapeHtml(form.delivery_datetime)}" ${readonly(isLab)}>
+            <input type="datetime-local" name="delivery_datetime" value="${escapeHtml(form.delivery_datetime)}" ${readonly(isLab)} ${requiredAttr(role, "lab", "Delivery Date & Time")}>
         </td>
     </tr>
 
@@ -562,21 +585,37 @@ button.primary{
 </table>
 
 <div class="main-grid">
-    <table class="requisition-box ${activeRoleClass(role, "site")}">
-        <tr><th>Requisition Number</th></tr>
-        <tr>
-            <td>
-                <input name="requisition_number" value="${escapeHtml(form.requisition_number)}" ${readonly(isSite)}>
-            </td>
-        </tr>
+    <div>
+        <table class="requisition-box ${activeRoleClass(role, "site")}">
+            <tr><th>Requisition Number</th></tr>
+            <tr>
+                <td>
+                    <input name="requisition_number" value="${escapeHtml(form.requisition_number)}" ${readonly(isSite)} ${requiredAttr(role, "site", "Requisition Number")}>
+                </td>
+            </tr>
 
-        <tr><th>PID Number</th></tr>
-        <tr>
-            <td>
-                <input name="pid" value="${escapeHtml(form.pid)}" ${readonly(isSite)}>
-            </td>
-        </tr>
-    </table>
+            <tr><th>PID Number</th></tr>
+            <tr>
+                <td>
+                    <input name="pid" value="${escapeHtml(form.pid)}" ${readonly(isSite)} ${requiredAttr(role, "site", "PID Number")}>
+                </td>
+            </tr>
+        </table>
+
+        <table class="monitor-table">
+            <thead>
+                <tr>
+                    <th class="${activeRoleClass(role, "site")}">Monitor S/N</th>
+                    ${isSite ? `<th>Action</th>` : ""}
+                </tr>
+            </thead>
+            <tbody id="monitorRows">
+                ${renderMonitorRows(role, monitors)}
+            </tbody>
+        </table>
+
+        ${isSite ? `<button type="button" class="small-button" style="margin-top:6px;width:100%;" onclick="addMonitorRow()">Add Monitor</button>` : ""}
+    </div>
 
     <div class="table-scroll">
         <table class="sample-table" id="sampleTable">
@@ -618,8 +657,24 @@ function toggleOther(select, inputId){
 
     if(select.value === "Other"){
         input.classList.remove("hidden");
+        input.setAttribute("data-required-label", input.placeholder || "Other field");
     } else {
         input.classList.add("hidden");
+        input.removeAttribute("data-required-label");
+        input.value = "";
+    }
+}
+
+function toggleRowOther(select){
+    const input = select.parentElement.querySelector('input[name="shipping_temp_other[]"]');
+    if(!input) return;
+
+    if(select.value === "Other"){
+        input.classList.remove("hidden");
+        input.setAttribute("data-required-label", "Other Shipping Temperature");
+    } else {
+        input.classList.add("hidden");
+        input.removeAttribute("data-required-label");
         input.value = "";
     }
 }
@@ -631,8 +686,10 @@ document.querySelectorAll('input[name="site_name"]').forEach(input => {
 
         if(input.value === "Other" && input.checked){
             other.classList.remove("hidden");
+            other.setAttribute("data-required-label", "Other Site Name");
         } else if(input.checked) {
             other.classList.add("hidden");
+            other.removeAttribute("data-required-label");
             other.value = "";
         }
     });
@@ -645,7 +702,7 @@ function addSampleRow(){
 
     tr.innerHTML = \`
         <td class="${activeRoleClass(role, "site")}">
-            <select name="sample_type[]">
+            <select name="sample_type[]" data-required-label="Sample Type">
                 <option value="4ml EDTA">4ml EDTA</option>
                 <option value="6ml EDTA">6ml EDTA</option>
                 <option value="4ml SST">4ml SST</option>
@@ -654,10 +711,19 @@ function addSampleRow(){
                 <option value="Spot Sputum">Spot Sputum</option>
             </select>
         </td>
-        <td class="${activeRoleClass(role, "site")}"><input type="number" step="0.1" name="shipping_temp[]"></td>
-        <td class="${activeRoleClass(role, "site")}"><input type="number" name="tubes_sent[]"></td>
-        <td class="${activeRoleClass(role, "site")}"><input type="datetime-local" name="sample_collection_datetime[]"></td>
-        <td class="${activeRoleClass(role, "site")}"><input name="visit[]"></td>
+        <td class="${activeRoleClass(role, "site")}">
+            <select name="shipping_temp[]" onchange="toggleRowOther(this)" data-required-label="Shipping Temperature">
+                <option value="Ambient 15-25">Ambient 15-25</option>
+                <option value="Refrigerated 2-8">Refrigerated 2-8</option>
+                <option value="Frozen -80">Frozen -80</option>
+                <option value="LN2 -196">LN2 -196</option>
+                <option value="Other">Other</option>
+            </select>
+            <input name="shipping_temp_other[]" class="hidden" placeholder="Enter temp condition">
+        </td>
+        <td class="${activeRoleClass(role, "site")}"><input type="number" name="tubes_sent[]" data-required-label="Tubes Sent"></td>
+        <td class="${activeRoleClass(role, "site")}"><input type="datetime-local" name="sample_collection_datetime[]" data-required-label="Sample Collection Date/Time"></td>
+        <td class="${activeRoleClass(role, "site")}"><input name="visit[]" data-required-label="Visit"></td>
         <td class="${activeRoleClass(role, "driver")}"><input type="number" step="0.1" name="courier_pickup_temp[]" readonly></td>
         <td class="${activeRoleClass(role, "lab")}"><input type="number" name="tubes_received[]" readonly></td>
         <td class="${activeRoleClass(role, "lab")}"><input name="receiver_initial_date[]" readonly></td>
@@ -674,6 +740,65 @@ function removeSampleRow(button){
     if(rows.length <= 1) return;
     button.closest("tr").remove();
 }
+
+function addMonitorRow(){
+    const tbody = document.getElementById("monitorRows");
+    const tr = document.createElement("tr");
+    tr.className = "monitor-row";
+
+    tr.innerHTML = \`
+        <td class="${activeRoleClass(role, "site")}">
+            <input name="monitor_sn[]" data-required-label="Monitor S/N">
+        </td>
+        <td class="action-cell">
+            <button type="button" class="small-button danger" onclick="removeMonitorRow(this)">Remove</button>
+        </td>
+    \`;
+
+    tbody.appendChild(tr);
+}
+
+function removeMonitorRow(button){
+    const rows = document.querySelectorAll(".monitor-row");
+    if(rows.length <= 1) return;
+    button.closest("tr").remove();
+}
+
+function validateBeforeSave(event){
+    document.querySelectorAll(".missing-field").forEach(el => el.classList.remove("missing-field"));
+
+    const fields = Array.from(document.querySelectorAll("[data-required-label]"))
+        .filter(field => !field.disabled && !field.readOnly && !field.classList.contains("hidden"));
+
+    const missing = [];
+
+    fields.forEach(field => {
+        const type = field.getAttribute("type");
+        let empty = false;
+
+        if(type === "radio"){
+            const group = document.querySelectorAll('input[name="' + field.name + '"]');
+            empty = !Array.from(group).some(radio => radio.checked);
+        } else {
+            empty = !String(field.value || "").trim();
+        }
+
+        if(empty){
+            const label = field.getAttribute("data-required-label");
+            if(!missing.includes(label)) missing.push(label);
+            field.classList.add("missing-field");
+        }
+    });
+
+    if(missing.length === 0) return true;
+
+    const message =
+        "The following field(s) have not been completed:\\n\\n" +
+        missing.map(item => "- " + item).join("\\n") +
+        "\\n\\nIf something should be blank, click OK to save anyway.\\nClick Cancel to go back and complete the form.";
+
+    return confirm(message);
+}
 </script>
 
 </body>
@@ -685,20 +810,21 @@ function getFormWithRows(id, callback) {
     db.get("SELECT * FROM coc_forms WHERE id = ?", [id], (err, form) => {
         if (err || !form) return callback(err || new Error("Record not found"));
 
-        db.all(
-            "SELECT * FROM coc_sample_rows WHERE form_id = ? ORDER BY row_order, id",
-            [id],
-            (rowErr, rows) => {
-                if (rowErr) return callback(rowErr);
-                callback(null, form, rows);
-            }
-        );
+        db.all("SELECT * FROM coc_sample_rows WHERE form_id = ? ORDER BY row_order, id", [id], (rowErr, rows) => {
+            if (rowErr) return callback(rowErr);
+
+            db.all("SELECT * FROM coc_monitors WHERE form_id = ? ORDER BY row_order, id", [id], (monitorErr, monitors) => {
+                if (monitorErr) return callback(monitorErr);
+                callback(null, form, rows, monitors);
+            });
+        });
     });
 }
 
 function saveSampleRows(formId, d, callback) {
     const sampleTypes = normalizeArray(d.sample_type);
     const shippingTemps = normalizeArray(d.shipping_temp);
+    const shippingTempOthers = normalizeArray(d.shipping_temp_other);
     const tubesSent = normalizeArray(d.tubes_sent);
     const collectionTimes = normalizeArray(d.sample_collection_datetime);
     const visits = normalizeArray(d.visit);
@@ -713,19 +839,22 @@ function saveSampleRows(formId, d, callback) {
 
         const stmt = db.prepare(`
             INSERT INTO coc_sample_rows (
-                form_id,row_order,sample_type,shipping_temp,tubes_sent,
+                form_id,row_order,sample_type,shipping_temp,shipping_temp_other,tubes_sent,
                 sample_collection_datetime,visit,courier_pickup_temp,
                 tubes_received,receiver_initial_date,comments,delivery_temp
             )
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
         `);
 
         for (let i = 0; i < sampleTypes.length; i++) {
+            const temp = shippingTemps[i] === "Other" ? shippingTempOthers[i] : shippingTemps[i];
+
             stmt.run([
                 formId,
                 i,
                 sampleTypes[i],
-                shippingTemps[i],
+                temp,
+                shippingTempOthers[i],
                 tubesSent[i],
                 collectionTimes[i],
                 visits[i],
@@ -741,17 +870,38 @@ function saveSampleRows(formId, d, callback) {
     });
 }
 
+function saveMonitors(formId, d, callback) {
+    const monitorSns = normalizeArray(d.monitor_sn);
+
+    db.run("DELETE FROM coc_monitors WHERE form_id = ?", [formId], err => {
+        if (err) return callback(err);
+
+        const stmt = db.prepare(`
+            INSERT INTO coc_monitors (form_id,row_order,monitor_sn)
+            VALUES (?,?,?)
+        `);
+
+        monitorSns.forEach((monitorSn, index) => {
+            if (String(monitorSn || "").trim()) {
+                stmt.run([formId, index, monitorSn]);
+            }
+        });
+
+        stmt.finalize(callback);
+    });
+}
+
 function saveRowsDirectly(formId, rows, callback) {
     db.run("DELETE FROM coc_sample_rows WHERE form_id = ?", [formId], err => {
         if (err) return callback(err);
 
         const stmt = db.prepare(`
             INSERT INTO coc_sample_rows (
-                form_id,row_order,sample_type,shipping_temp,tubes_sent,
+                form_id,row_order,sample_type,shipping_temp,shipping_temp_other,tubes_sent,
                 sample_collection_datetime,visit,courier_pickup_temp,
                 tubes_received,receiver_initial_date,comments,delivery_temp
             )
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
         `);
 
         rows.forEach((row, index) => {
@@ -760,6 +910,7 @@ function saveRowsDirectly(formId, rows, callback) {
                 index,
                 row.sample_type,
                 row.shipping_temp,
+                row.shipping_temp_other,
                 row.tubes_sent,
                 row.sample_collection_datetime,
                 row.visit,
@@ -778,6 +929,7 @@ function saveRowsDirectly(formId, rows, callback) {
 function mergeRowsForRole(role, d, existingRows) {
     const sampleTypes = normalizeArray(d.sample_type);
     const shippingTemps = normalizeArray(d.shipping_temp);
+    const shippingTempOthers = normalizeArray(d.shipping_temp_other);
     const tubesSent = normalizeArray(d.tubes_sent);
     const collectionTimes = normalizeArray(d.sample_collection_datetime);
     const visits = normalizeArray(d.visit);
@@ -792,10 +944,12 @@ function mergeRowsForRole(role, d, existingRows) {
 
     for (let i = 0; i < rowCount; i++) {
         const old = existingRows[i] || {};
+        const temp = shippingTemps[i] === "Other" ? shippingTempOthers[i] : shippingTemps[i];
 
         rows.push({
             sample_type: role === "site" ? sampleTypes[i] : old.sample_type,
-            shipping_temp: role === "site" ? shippingTemps[i] : old.shipping_temp,
+            shipping_temp: role === "site" ? temp : old.shipping_temp,
+            shipping_temp_other: role === "site" ? shippingTempOthers[i] : old.shipping_temp_other,
             tubes_sent: role === "site" ? tubesSent[i] : old.tubes_sent,
             sample_collection_datetime: role === "site" ? collectionTimes[i] : old.sample_collection_datetime,
             visit: role === "site" ? visits[i] : old.visit,
@@ -812,7 +966,7 @@ function mergeRowsForRole(role, d, existingRows) {
 
 async function generatePdf(formId) {
     return new Promise((resolve, reject) => {
-        getFormWithRows(formId, async (err, form, rows) => {
+        getFormWithRows(formId, async (err, form, rows, monitors) => {
             if (err) return reject(err);
 
             const folderPath = path.join(__dirname, "eCOC IC Labs");
@@ -843,7 +997,7 @@ async function generatePdf(formId) {
 
             function tableHeader(x, y, widths, headers) {
                 let cx = x;
-                doc.font("Helvetica-Bold").fontSize(5.8).fillColor("#ffffff");
+                doc.font("Helvetica-Bold").fontSize(5.6);
                 headers.forEach((h, i) => {
                     doc.rect(cx, y, widths[i], 24).fillAndStroke(navy, border);
                     doc.fillColor("#ffffff").text(h, cx + 2, y + 6, { width: widths[i] - 4, align: "center" });
@@ -857,17 +1011,13 @@ async function generatePdf(formId) {
             doc.moveTo(24, 78).lineTo(doc.page.width - 24, 78).strokeColor(border).stroke();
 
             if (fs.existsSync(logoPath)) {
-                doc.image(logoPath, 26, 18, { width: 82 });
+                doc.image(logoPath, 26, 8, { width: 72 });
             }
 
-            doc.fillColor(navy)
-                .font("Helvetica-Bold")
-                .fontSize(17)
+            doc.fillColor(navy).font("Helvetica-Bold").fontSize(17)
                 .text("Electronic Chain of Custody Form", 0, 26, { align: "center" });
 
-            doc.fillColor(text)
-                .font("Helvetica")
-                .fontSize(7)
+            doc.fillColor(text).font("Helvetica").fontSize(7)
                 .text(
                     "IC Labs Contact Information:\n0211407190 | info@iclabs.co.za\nGround Floor Albion Springs\n183 Main Road, Rondebosch\nCape Town, Western Cape, South Africa",
                     585,
@@ -907,8 +1057,11 @@ async function generatePdf(formId) {
             cell(24, startY + cellH * 2, cellW * 4, 24, "Important Note", "This log must physically accompany the samples.", { fill: "#fff7df" });
 
             const reqY = startY + cellH * 2 + 38;
-            cell(24, reqY, 132, 36, "Requisition Number", form.requisition_number, { fill: paleBlue, valueSize: 8.5 });
-            cell(24, reqY + 36, 132, 36, "PID Number", form.pid, { fill: paleBlue, valueSize: 8.5 });
+            cell(24, reqY, 132, 34, "Requisition Number", form.requisition_number, { fill: paleBlue, valueSize: 8.5 });
+            cell(24, reqY + 34, 132, 34, "PID Number", form.pid, { fill: paleBlue, valueSize: 8.5 });
+
+            const monitorText = monitors.length ? monitors.map(m => m.monitor_sn).join("\n") : "-";
+            cell(24, reqY + 68, 132, 64, "Monitor S/N", monitorText, { fill: "#ffffff", valueSize: 7 });
 
             const tableX = 166;
             let tableY = reqY;
@@ -918,12 +1071,12 @@ async function generatePdf(formId) {
                 "Pickup Temp", "Tubes Rec.", "Receiver Initial/Date", "Comments", "Delivery Temp"
             ];
 
-            const widths = [82, 54, 52, 96, 42, 58, 54, 88, 92, 54];
+            const widths = [82, 68, 48, 92, 40, 56, 48, 82, 86, 50];
 
             tableHeader(tableX, tableY, widths, headers);
             tableY += 24;
 
-            doc.font("Helvetica").fontSize(5.8).fillColor(text);
+            doc.font("Helvetica").fontSize(5.6).fillColor(text);
 
             rows.forEach((row, index) => {
                 let x = tableX;
@@ -945,7 +1098,7 @@ async function generatePdf(formId) {
 
                 values.forEach((value, i) => {
                     doc.rect(x, tableY, widths[i], rowH).fillAndStroke(fill, border);
-                    doc.fillColor(text).font("Helvetica").fontSize(5.8)
+                    doc.fillColor(text).font("Helvetica").fontSize(5.6)
                         .text(value || "-", x + 2, tableY + 5, { width: widths[i] - 4, height: rowH - 8 });
                     x += widths[i];
                 });
@@ -969,34 +1122,102 @@ async function generatePdf(formId) {
     });
 }
 
-app.get("/", (req, res) => {
-    res.redirect("/login");
-});
+app.get("/", (req, res) => res.redirect("/login"));
 
 app.get("/login", (req, res) => {
     res.send(`
 <html>
 <head>
-<title>eCOC Login</title>
+<title>IC Labs eCOC Login</title>
 <style>
-body{font-family:Arial;padding:50px;background:#f4f6f9;text-align:center;}
-input,select,button{padding:10px;margin:10px;width:220px;}
-button{background:#2c3e50;color:white;border:none;border-radius:5px;cursor:pointer;}
+body{
+    font-family:Arial, sans-serif;
+    margin:0;
+    min-height:100vh;
+    background:linear-gradient(135deg,#eef4f8,#d9e4ec);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    color:#1f2933;
+}
+
+.login-card{
+    width:360px;
+    background:white;
+    padding:34px;
+    border-radius:10px;
+    box-shadow:0 12px 30px rgba(31,58,95,0.18);
+    text-align:center;
+}
+
+.logo{
+    width:150px;
+    margin-bottom:12px;
+}
+
+h1{
+    font-size:22px;
+    margin:8px 0 4px;
+    color:#1f3a5f;
+}
+
+p{
+    margin:0 0 24px;
+    font-size:13px;
+    color:#5b6775;
+}
+
+label{
+    display:block;
+    text-align:left;
+    font-size:13px;
+    font-weight:bold;
+    margin:12px 0 5px;
+}
+
+input,select{
+    width:100%;
+    box-sizing:border-box;
+    padding:10px;
+    border:1px solid #b7c0ca;
+    border-radius:5px;
+    font-size:14px;
+}
+
+button{
+    width:100%;
+    margin-top:20px;
+    padding:11px;
+    background:#1f3a5f;
+    color:white;
+    border:none;
+    border-radius:5px;
+    cursor:pointer;
+    font-size:15px;
+    font-weight:bold;
+}
 </style>
 </head>
 <body>
-<h2>eCOC Access</h2>
-<form method="POST" action="/login">
-<label>Role:</label><br>
-<select name="role">
-<option value="site">Site</option>
-<option value="driver">Driver</option>
-<option value="lab">Lab</option>
-</select><br>
-<label>Password:</label><br>
-<input type="password" name="password"><br>
-<button type="submit">Enter</button>
-</form>
+<div class="login-card">
+    <img src="/IC_Labs_Logo.png" class="logo">
+    <h1>IC Labs eCOC Login</h1>
+    <p>Electronic Chain of Custody Access</p>
+
+    <form method="POST" action="/login">
+        <label>Role</label>
+        <select name="role">
+            <option value="site">Site</option>
+            <option value="driver">Driver</option>
+            <option value="lab">Lab</option>
+        </select>
+
+        <label>Password</label>
+        <input type="password" name="password">
+
+        <button type="submit">Sign In</button>
+    </form>
+</div>
 </body>
 </html>
 `);
@@ -1084,7 +1305,7 @@ app.get("/form", (req, res) => {
     }
 
     const form = newReq ? { requisition_number: newReq } : {};
-    res.send(renderForm(role, form, [{}]));
+    res.send(renderForm(role, form, [{}], [{}]));
 });
 
 app.get("/form/:id", (req, res) => {
@@ -1095,9 +1316,9 @@ app.get("/form/:id", (req, res) => {
         return res.redirect("/login");
     }
 
-    getFormWithRows(id, (err, form, rows) => {
+    getFormWithRows(id, (err, form, rows, monitors) => {
         if (err) return res.send("Record not found");
-        res.send(renderForm(role, form, rows));
+        res.send(renderForm(role, form, rows, monitors));
     });
 });
 
@@ -1160,16 +1381,27 @@ app.post("/add", (req, res) => {
 
                 const mergedRows = mergeRowsForRole(role, d, existingRows);
 
-                saveRowsDirectly(d.id, mergedRows, async saveErr => {
-                    if (saveErr) return res.send("Sample Row Error: " + saveErr.message);
+                saveRowsDirectly(d.id, mergedRows, rowErr => {
+                    if (rowErr) return res.send("Sample Row Error: " + rowErr.message);
 
-                    try {
-                        await generatePdf(d.id);
-                    } catch (pdfErr) {
-                        console.error(pdfErr);
+                    const finish = async () => {
+                        try {
+                            await generatePdf(d.id);
+                        } catch (pdfErr) {
+                            console.error(pdfErr);
+                        }
+
+                        res.redirect(`/form/${d.id}?role=${role}`);
+                    };
+
+                    if (role === "site") {
+                        saveMonitors(d.id, d, monitorErr => {
+                            if (monitorErr) return res.send("Monitor Error: " + monitorErr.message);
+                            finish();
+                        });
+                    } else {
+                        finish();
                     }
-
-                    res.redirect(`/form/${d.id}?role=${role}`);
                 });
             });
         });
@@ -1201,16 +1433,20 @@ app.post("/add", (req, res) => {
 
             const formId = this.lastID;
 
-            saveSampleRows(formId, d, async saveErr => {
-                if (saveErr) return res.send("Sample Row Error: " + saveErr.message);
+            saveSampleRows(formId, d, sampleErr => {
+                if (sampleErr) return res.send("Sample Row Error: " + sampleErr.message);
 
-                try {
-                    await generatePdf(formId);
-                } catch (pdfErr) {
-                    console.error(pdfErr);
-                }
+                saveMonitors(formId, d, async monitorErr => {
+                    if (monitorErr) return res.send("Monitor Error: " + monitorErr.message);
 
-                res.redirect(`/form/${formId}?role=${role}`);
+                    try {
+                        await generatePdf(formId);
+                    } catch (pdfErr) {
+                        console.error(pdfErr);
+                    }
+
+                    res.redirect(`/form/${formId}?role=${role}`);
+                });
             });
         });
     }
