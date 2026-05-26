@@ -316,7 +316,9 @@ th{background:#e8eef5;font-size:10px;text-align:center;}
 label{font-weight:bold;display:block;margin-bottom:3px;font-size:11px;}
 input,select,textarea{width:100%;box-sizing:border-box;padding:4px;border:1px solid #b7c0ca;border-radius:3px;font-size:11px;}
 input[readonly]{background:#f1f3f5;}
-.active-required{background:#fff5f5;box-shadow:inset 0 0 0 2px #c0392b;}
+.active-required{
+    background:#fffafa;
+}
 .role-key{display:flex;gap:10px;margin:8px 0;font-size:11px;align-items:center;}
 .role-key span{display:inline-flex;align-items:center;gap:4px;}
 .role-dot{width:12px;height:12px;border:1px solid #c0392b;display:inline-block;background:#fff5f5;}
@@ -355,7 +357,9 @@ button.primary{flex:1;}
 .success{background:#218838;}
 .hidden{display:none;}
 .missing-field,.required-empty{border:2px solid #c0392b!important;background:#ffecec!important;}
-.required-cell{box-shadow:inset 0 0 0 2px #c0392b;}
+.required-cell{
+    box-shadow:none;
+}
 .lock-badge{font-weight:bold;color:#7a4b00;}
 @page{size:A4 landscape;margin:8mm;}
 @media print{body{background:white;padding:0;}.form-shell{width:100%;min-height:auto;box-shadow:none;padding:0;}.button-row,.role-key,.instruction-box,.owner-box{display:none;}}
