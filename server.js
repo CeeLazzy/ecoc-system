@@ -177,17 +177,9 @@ function renderOptions(options, currentValue) {
 }
 
 function roleInstructions(role, form = {}) {
-    if (role === "site" && form.site_locked) {
-        return "Your section is locked. Contact the owner if changes are required.";
-    }
-
-    if (role === "driver" && form.driver_locked) {
-        return "Your section is locked. Contact the owner if changes are required.";
-    }
-
-    if (role === "lab" && form.lab_locked) {
-        return "Your section is locked. Contact the owner if changes are required.";
-    }
+    if (role === "site" && form.site_locked) return "Your section is locked. Contact the owner if changes are required.";
+    if (role === "driver" && form.driver_locked) return "Your section is locked. Contact the owner if changes are required.";
+    if (role === "lab" && form.lab_locked) return "Your section is locked. Contact the owner if changes are required.";
 
     const instructions = {
         site: "Complete protocol, site, shipping date, shipped by, page count, requisition number, PID, sample details, tubes sent, collection date/time and visit.",
@@ -344,7 +336,8 @@ button.primary{flex:1;}
 .danger{background:#b42318;}
 .success{background:#218838;}
 .hidden{display:none;}
-.missing-field{border:2px solid #c0392b!important;background:#fff5f5!important;}
+.missing-field,.required-empty{border:2px solid #c0392b!important;background:#fff5f5!important;}
+.required-cell{box-shadow:inset 0 0 0 2px #c0392b;}
 .lock-badge{font-weight:bold;color:#7a4b00;}
 @page{size:A4 landscape;margin:8mm;}
 @media print{body{background:white;padding:0;}.form-shell{width:100%;min-height:auto;box-shadow:none;padding:0;}.button-row,.role-key,.instruction-box,.owner-box{display:none;}}
@@ -352,7 +345,7 @@ button.primary{flex:1;}
 </head>
 <body>
 <div class="form-shell">
-<form method="POST" action="/add" onsubmit="return validateBeforeSave(event)">
+<form method="POST" action="/add" onsubmit="return validateBeforeSave()">
 <input type="hidden" name="id" value="${escapeHtml(form.id)}">
 <input type="hidden" name="role" value="${escapeHtml(role)}">
 
@@ -514,6 +507,8 @@ function toggleOther(select, inputId){
         input.removeAttribute("data-required-label");
         input.value = "";
     }
+
+    refreshRequiredHighlights();
 }
 
 function toggleRowOther(select){
@@ -528,6 +523,8 @@ function toggleRowOther(select){
         input.removeAttribute("data-required-label");
         input.value = "";
     }
+
+    refreshRequiredHighlights();
 }
 
 document.querySelectorAll('input[name="site_name"]').forEach(input => {
@@ -543,6 +540,8 @@ document.querySelectorAll('input[name="site_name"]').forEach(input => {
             other.removeAttribute("data-required-label");
             other.value = "";
         }
+
+        refreshRequiredHighlights();
     });
 });
 
@@ -584,12 +583,14 @@ function addSampleRow(){
     \`;
 
     tbody.appendChild(tr);
+    refreshRequiredHighlights();
 }
 
 function removeSampleRow(button){
     const rows = document.querySelectorAll(".sample-row");
     if(rows.length <= 1) return;
     button.closest("tr").remove();
+    refreshRequiredHighlights();
 }
 
 function addMonitorRow(){
@@ -607,16 +608,52 @@ function addMonitorRow(){
     \`;
 
     tbody.appendChild(tr);
+    refreshRequiredHighlights();
 }
 
 function removeMonitorRow(button){
     const rows = document.querySelectorAll(".monitor-row");
     if(rows.length <= 1) return;
     button.closest("tr").remove();
+    refreshRequiredHighlights();
+}
+
+function refreshRequiredHighlights(){
+    document.querySelectorAll(".required-empty").forEach(el => el.classList.remove("required-empty"));
+    document.querySelectorAll(".required-cell").forEach(el => el.classList.remove("required-cell"));
+
+    const fields = Array.from(document.querySelectorAll("[data-required-label]"))
+        .filter(field => !field.disabled && !field.readOnly && !field.classList.contains("hidden"));
+
+    fields.forEach(field => {
+        const type = field.getAttribute("type");
+        let empty = false;
+
+        if(type === "radio"){
+            const group = document.querySelectorAll('input[name="' + field.name + '"]');
+            empty = !Array.from(group).some(radio => radio.checked);
+
+            if(empty){
+                const groupBox = field.closest(".choice-group");
+                if(groupBox) groupBox.classList.add("required-empty");
+            }
+        } else {
+            empty = !String(field.value || "").trim();
+
+            if(empty){
+                field.classList.add("required-empty");
+            }
+        }
+
+        if(empty){
+            const cell = field.closest("td");
+            if(cell) cell.classList.add("required-cell");
+        }
+    });
 }
 
 function validateBeforeSave(){
-    document.querySelectorAll(".missing-field").forEach(el => el.classList.remove("missing-field"));
+    refreshRequiredHighlights();
 
     const fields = Array.from(document.querySelectorAll("[data-required-label]"))
         .filter(field => !field.disabled && !field.readOnly && !field.classList.contains("hidden"));
@@ -637,7 +674,6 @@ function validateBeforeSave(){
         if(empty){
             const label = field.getAttribute("data-required-label");
             if(!missing.includes(label)) missing.push(label);
-            field.classList.add("missing-field");
         }
     });
 
@@ -650,6 +686,10 @@ function validateBeforeSave(){
 
     return confirm(message);
 }
+
+document.addEventListener("input", refreshRequiredHighlights);
+document.addEventListener("change", refreshRequiredHighlights);
+document.addEventListener("DOMContentLoaded", refreshRequiredHighlights);
 </script>
 </body>
 </html>
