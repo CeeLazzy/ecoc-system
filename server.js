@@ -1,4 +1,5 @@
 const express = require("express");
+const session = require("express-session");
 const sqlite3 = require("sqlite3").verbose();
 const PDFDocument = require("pdfkit");
 const fs = require("fs");
@@ -9,6 +10,17 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.urlencoded({ extended: true }));
+
+app.use(session({
+    secret: "change-this-to-a-long-random-ic-labs-secret",
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+        httpOnly: true,
+        maxAge: 1000 * 60 * 30
+    }
+}));
+
 app.use(express.static(__dirname));
 app.use("/pdfs", express.static(path.join(__dirname, "eCOC IC Labs")));
 
@@ -124,6 +136,19 @@ db.serialize(() => {
     `);
 });
 
+function requireLogin(req, res, next) {
+    if (!req.session || !req.session.role) return res.redirect("/login");
+    next();
+}
+
+function requireRole(...allowedRoles) {
+    return (req, res, next) => {
+        if (!req.session || !req.session.role) return res.redirect("/login");
+        if (!allowedRoles.includes(req.session.role)) return res.status(403).send("Access denied.");
+        next();
+    };
+}
+
 function todayDate() {
     return new Date().toISOString().split("T")[0];
 }
@@ -163,7 +188,7 @@ function disabled(canEdit) {
 }
 
 function activeRoleClass(currentRole, fieldRole) {
-    return currentRole === fieldRole ? `active-${fieldRole}` : "";
+    return currentRole === fieldRole ? "active-required" : "";
 }
 
 function requiredAttr(canEdit, label) {
@@ -192,14 +217,12 @@ function roleInstructions(role, form = {}) {
 }
 
 function renderSiteOptions(currentValue, canEdit) {
-    return siteOptions.map(site => {
-        return `
-            <label class="choice-line">
-                <input type="radio" name="site_name" value="${escapeHtml(site)}" ${checked(currentValue, site)} ${disabled(canEdit)} ${requiredAttr(canEdit, "Site Name")}>
-                <span>${escapeHtml(site)}</span>
-            </label>
-        `;
-    }).join("");
+    return siteOptions.map(site => `
+        <label class="choice-line">
+            <input type="radio" name="site_name" value="${escapeHtml(site)}" ${checked(currentValue, site)} ${disabled(canEdit)} ${requiredAttr(canEdit, "Site Name")}>
+            <span>${escapeHtml(site)}</span>
+        </label>
+    `).join("");
 }
 
 function renderMonitorRows(role, monitors, form = {}) {
@@ -293,15 +316,10 @@ th{background:#e8eef5;font-size:10px;text-align:center;}
 label{font-weight:bold;display:block;margin-bottom:3px;font-size:11px;}
 input,select,textarea{width:100%;box-sizing:border-box;padding:4px;border:1px solid #b7c0ca;border-radius:3px;font-size:11px;}
 input[readonly]{background:#f1f3f5;}
-.active-site{background:#dff0ff;}
-.active-driver{background:#fff2b8;}
-.active-lab{background:#dff8e8;}
+.active-required{background:#fff5f5;box-shadow:inset 0 0 0 2px #c0392b;}
 .role-key{display:flex;gap:10px;margin:8px 0;font-size:11px;align-items:center;}
 .role-key span{display:inline-flex;align-items:center;gap:4px;}
-.role-dot{width:12px;height:12px;border:1px solid #9aa6b2;display:inline-block;}
-.dot-site{background:#dff0ff;}
-.dot-driver{background:#fff2b8;}
-.dot-lab{background:#dff8e8;}
+.role-dot{width:12px;height:12px;border:1px solid #c0392b;display:inline-block;background:#fff5f5;}
 .instruction-box{margin:8px 0;padding:8px 10px;background:#f5f7fa;border-left:4px solid #1f3a5f;font-size:12px;}
 .owner-box{margin:8px 0;padding:8px 10px;background:#eef4fb;border:1px solid #c9d8e8;font-size:12px;display:flex;justify-content:space-between;align-items:center;}
 .owner-box a{background:#1f3a5f;color:white;text-decoration:none;padding:7px 10px;border-radius:4px;}
@@ -336,7 +354,7 @@ button.primary{flex:1;}
 .danger{background:#b42318;}
 .success{background:#218838;}
 .hidden{display:none;}
-.missing-field,.required-empty{border:2px solid #c0392b!important;background:#fff5f5!important;}
+.missing-field,.required-empty{border:2px solid #c0392b!important;background:#ffecec!important;}
 .required-cell{box-shadow:inset 0 0 0 2px #c0392b;}
 .lock-badge{font-weight:bold;color:#7a4b00;}
 @page{size:A4 landscape;margin:8mm;}
@@ -347,7 +365,6 @@ button.primary{flex:1;}
 <div class="form-shell">
 <form method="POST" action="/add" onsubmit="return validateBeforeSave()">
 <input type="hidden" name="id" value="${escapeHtml(form.id)}">
-<input type="hidden" name="role" value="${escapeHtml(role)}">
 
 <div class="header">
     <div><img src="/IC_Labs_Logo.png" class="logo"></div>
@@ -363,9 +380,7 @@ button.primary{flex:1;}
 </div>
 
 <div class="role-key">
-    <span><i class="role-dot dot-site"></i> Site fields ${form.site_locked ? "<span class='lock-badge'>(locked)</span>" : ""}</span>
-    <span><i class="role-dot dot-driver"></i> Driver fields ${form.driver_locked ? "<span class='lock-badge'>(locked)</span>" : ""}</span>
-    <span><i class="role-dot dot-lab"></i> Lab fields ${form.lab_locked ? "<span class='lock-badge'>(locked)</span>" : ""}</span>
+    <span><i class="role-dot"></i> Your required section ${form[role + "_locked"] ? "<span class='lock-badge'>(locked)</span>" : ""}</span>
 </div>
 
 <div class="instruction-box">
@@ -375,7 +390,7 @@ button.primary{flex:1;}
 ${isOwner && form.id ? `
 <div class="owner-box">
     <span>Owner access: manage which sections can be edited again.</span>
-    <a href="/owner/${form.id}?role=owner">Manage Access</a>
+    <a href="/owner/${form.id}">Manage Access</a>
 </div>
 ` : ""}
 
@@ -489,6 +504,7 @@ ${isOwner && form.id ? `
     ${canEditSite ? `<button type="button" onclick="addSampleRow()">Add Sample Type</button>` : ""}
     ${role !== "owner" ? `<button class="primary" type="submit">Save eCOC</button>` : ""}
     ${form.id ? `<a class="button-link success" href="/download/${form.id}">Download PDF</a>` : ""}
+    <a class="button-link" href="/logout">Log Out</a>
 </div>
 
 </form>
@@ -1061,7 +1077,8 @@ app.post("/login", (req, res) => {
     const { role, password } = req.body;
 
     if (users[role] && password === users[role]) {
-        return res.redirect(`/search?role=${role}`);
+        req.session.role = role;
+        return res.redirect("/search");
     }
 
     res.send(renderAuthCard("Login Failed", `
@@ -1071,10 +1088,14 @@ app.post("/login", (req, res) => {
     `));
 });
 
-app.get("/search", (req, res) => {
-    const role = req.query.role || "site";
+app.get("/logout", (req, res) => {
+    req.session.destroy(() => {
+        res.redirect("/login");
+    });
+});
 
-    if (!roles.includes(role)) return res.redirect("/login");
+app.get("/search", requireLogin, (req, res) => {
+    const role = req.session.role;
 
     res.send(renderAuthCard("eCOC Options", `
         <h1>eCOC Options</h1>
@@ -1083,60 +1104,50 @@ app.get("/search", (req, res) => {
         <form method="GET" action="/load">
             <label>Load Existing eCOC</label>
             <input name="reqnum" placeholder="Enter Requisition Number">
-            <input type="hidden" name="role" value="${escapeHtml(role)}">
             <button type="submit">Load Form</button>
         </form>
 
         ${role === "site" ? `
             <hr>
             <form method="GET" action="/form">
-                <input type="hidden" name="role" value="${escapeHtml(role)}">
                 <button type="submit">Start New eCOC</button>
             </form>
         ` : ""}
 
         <a class="link-button secondary" href="/view-pdfs">View Generated PDFs</a>
+        <a class="link-button secondary" href="/logout">Log Out</a>
     `));
 });
 
-app.get("/load", (req, res) => {
-    const { reqnum, role } = req.query;
+app.get("/load", requireLogin, (req, res) => {
+    const { reqnum } = req.query;
+    const role = req.session.role;
 
-    if (!reqnum || !roles.includes(role)) {
-        return res.send("Invalid requisition number or role");
-    }
+    if (!reqnum) return res.send("Invalid requisition number");
 
     db.get("SELECT * FROM coc_forms WHERE requisition_number = ?", [reqnum], (err, row) => {
         if (err) return res.send("DB Error: " + err.message);
 
         if (!row) {
-            if (role === "site") {
-                return res.redirect(`/form?role=${role}&newReq=${encodeURIComponent(reqnum)}`);
-            }
-
+            if (role === "site") return res.redirect(`/form?newReq=${encodeURIComponent(reqnum)}`);
             return res.send(`No record found for Requisition Number: ${escapeHtml(reqnum)}`);
         }
 
-        res.redirect(`/form/${row.id}?role=${role}`);
+        res.redirect(`/form/${row.id}`);
     });
 });
 
-app.get("/form", (req, res) => {
-    const role = req.query.role;
+app.get("/form", requireRole("site"), (req, res) => {
+    const role = req.session.role;
     const newReq = req.query.newReq;
-
-    if (!roles.includes(role)) return res.redirect("/login");
-    if (role !== "site") return res.send("Only the site role can start a new eCOC.");
-
     const form = newReq ? { requisition_number: newReq, site_locked: 0, driver_locked: 0, lab_locked: 0 } : { site_locked: 0, driver_locked: 0, lab_locked: 0 };
+
     res.send(renderForm(role, form, [{}], [{}]));
 });
 
-app.get("/form/:id", (req, res) => {
-    const role = req.query.role;
+app.get("/form/:id", requireLogin, (req, res) => {
+    const role = req.session.role;
     const id = req.params.id;
-
-    if (!roles.includes(role)) return res.redirect("/login");
 
     getFormWithRows(id, (err, form, rows, monitors) => {
         if (err) return res.send("Record not found");
@@ -1144,11 +1155,9 @@ app.get("/form/:id", (req, res) => {
     });
 });
 
-app.post("/add", (req, res) => {
+app.post("/add", requireRole("site", "driver", "lab"), (req, res) => {
     const d = req.body;
-    const role = d.role;
-
-    if (!["site", "driver", "lab"].includes(role)) return res.send("Invalid role");
+    const role = req.session.role;
 
     const protocol = d.protocol_name === "Other" ? d.protocolOther : d.protocol_name;
     const site = d.site_name === "Other" ? d.siteOther : d.site_name;
@@ -1220,7 +1229,7 @@ app.post("/add", (req, res) => {
                                 console.error(pdfErr);
                             }
 
-                            res.redirect(`/form/${d.id}?role=${role}`);
+                            res.redirect(`/form/${d.id}`);
                         });
                     };
 
@@ -1273,17 +1282,14 @@ app.post("/add", (req, res) => {
                     console.error(pdfErr);
                 }
 
-                res.redirect(`/form/${formId}?role=${role}`);
+                res.redirect(`/form/${formId}`);
             });
         });
     }
 });
 
-app.get("/owner/:id", (req, res) => {
+app.get("/owner/:id", requireRole("owner"), (req, res) => {
     const id = req.params.id;
-    const role = req.query.role;
-
-    if (role !== "owner") return res.redirect("/login");
 
     db.get("SELECT * FROM coc_forms WHERE id = ?", [id], (err, form) => {
         if (err || !form) return res.send("Record not found");
@@ -1293,8 +1299,6 @@ app.get("/owner/:id", (req, res) => {
             <p>Requisition: ${escapeHtml(form.requisition_number || "-")}</p>
 
             <form method="POST" action="/owner/${id}/access">
-                <input type="hidden" name="role" value="owner">
-
                 <label><input type="checkbox" name="allow_site" ${form.site_locked ? "" : "checked"} style="width:auto;"> Allow Site to edit</label>
                 <label><input type="checkbox" name="allow_driver" ${form.driver_locked ? "" : "checked"} style="width:auto;"> Allow Driver to edit</label>
                 <label><input type="checkbox" name="allow_lab" ${form.lab_locked ? "" : "checked"} style="width:auto;"> Allow Lab to edit</label>
@@ -1302,16 +1306,14 @@ app.get("/owner/:id", (req, res) => {
                 <button type="submit">Update Access</button>
             </form>
 
-            <a class="link-button secondary" href="/form/${id}?role=owner">Back to Form</a>
+            <a class="link-button secondary" href="/form/${id}">Back to Form</a>
         `));
     });
 });
 
-app.post("/owner/:id/access", (req, res) => {
+app.post("/owner/:id/access", requireRole("owner"), (req, res) => {
     const id = req.params.id;
     const d = req.body;
-
-    if (d.role !== "owner") return res.redirect("/login");
 
     db.run(`
         UPDATE coc_forms SET
@@ -1327,11 +1329,11 @@ app.post("/owner/:id/access", (req, res) => {
         id
     ], err => {
         if (err) return res.send("Access update error: " + err.message);
-        res.redirect(`/form/${id}?role=owner`);
+        res.redirect(`/form/${id}`);
     });
 });
 
-app.get("/view-pdfs", (req, res) => {
+app.get("/view-pdfs", requireLogin, (req, res) => {
     const pdfDir = path.join(__dirname, "eCOC IC Labs");
 
     fs.readdir(pdfDir, (err, files) => {
@@ -1343,13 +1345,13 @@ app.get("/view-pdfs", (req, res) => {
         pdfFiles.forEach(file => {
             html += `<li><a href="/pdfs/${encodeURIComponent(file)}" target="_blank">${escapeHtml(file)}</a></li>`;
         });
-        html += "</ul>";
+        html += "</ul><p><a href='/search'>Back</a></p>";
 
         res.send(html);
     });
 });
 
-app.get("/download/:id", async (req, res) => {
+app.get("/download/:id", requireLogin, async (req, res) => {
     const id = req.params.id;
 
     try {
