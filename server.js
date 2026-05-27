@@ -2,6 +2,7 @@ const express = require("express");
 const session = require("express-session");
 const sqlite3 = require("sqlite3").verbose();
 const PDFDocument = require("pdfkit");
+const QRCode = require("qrcode");
 const fs = require("fs");
 const path = require("path");
 const bwipjs = require("bwip-js");
@@ -23,6 +24,7 @@ app.use(session({
 
 app.use(express.static(__dirname));
 app.use("/pdfs", express.static(path.join(__dirname, "eCOC IC Labs")));
+app.use("/qr-pdfs", express.static(path.join(__dirname, "eCOC QR Codes")));
 
 const users = {
     site: "site123",
@@ -134,17 +136,37 @@ db.serialize(() => {
             FOREIGN KEY(form_id) REFERENCES coc_forms(id)
         )
     `);
+
+    db.run(`
+        CREATE TABLE IF NOT EXISTS coc_job_numbers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            form_id INTEGER,
+            row_order INTEGER,
+            job_number TEXT,
+            FOREIGN KEY(form_id) REFERENCES coc_forms(id)
+        )
+    `);
 });
 
 function requireLogin(req, res, next) {
-    if (!req.session || !req.session.role) return res.redirect("/login");
+    if (!req.session || !req.session.role) {
+        if (req.session) req.session.returnTo = req.originalUrl;
+        return res.redirect("/login");
+    }
     next();
 }
 
 function requireRole(...allowedRoles) {
     return (req, res, next) => {
-        if (!req.session || !req.session.role) return res.redirect("/login");
-        if (!allowedRoles.includes(req.session.role)) return res.status(403).send("Access denied.");
+        if (!req.session || !req.session.role) {
+            if (req.session) req.session.returnTo = req.originalUrl;
+            return res.redirect("/login");
+        }
+
+        if (!allowedRoles.includes(req.session.role)) {
+            return res.status(403).send("Access denied.");
+        }
+
         next();
     };
 }
@@ -208,7 +230,7 @@ function roleInstructions(role, form = {}) {
 
     const instructions = {
         site: "Complete protocol, site, shipping date, shipped by, page count, requisition number, PID, sample details, tubes sent, collection date/time and visit.",
-        driver: "Complete courier name, courier collection date/time, monitor S/N and pickup temperature.",
+        driver: "Complete courier name, courier collection date/time, monitor S/N, job number and pickup temperature.",
         lab: "Complete delivery date/time, tubes received, receiver initial/date, comments and delivery temperature.",
         owner: "Review the eCOC and manage edit access for the site, driver and lab sections."
     };
@@ -237,6 +259,24 @@ function renderMonitorRows(role, monitors, form = {}) {
             ${canEditDriver ? `
                 <td class="action-cell">
                     <button type="button" class="small-button danger" onclick="removeMonitorRow(this)">Remove</button>
+                </td>
+            ` : ""}
+        </tr>
+    `).join("");
+}
+
+function renderJobRows(role, jobs, form = {}) {
+    const canEditDriver = role === "driver" && !form.driver_locked;
+    const usableJobs = jobs.length ? jobs : [{}];
+
+    return usableJobs.map(job => `
+        <tr class="job-row">
+            <td class="${activeRoleClass(role, "driver")}">
+                <input name="job_number[]" value="${escapeHtml(job.job_number)}" ${readonly(canEditDriver)} ${requiredAttr(canEditDriver, "Job Number")}>
+            </td>
+            ${canEditDriver ? `
+                <td class="action-cell">
+                    <button type="button" class="small-button danger" onclick="removeJobRow(this)">Remove</button>
                 </td>
             ` : ""}
         </tr>
@@ -290,7 +330,7 @@ function renderSampleRows(role, rows, form = {}) {
     }).join("");
 }
 
-function renderForm(role, form = {}, rows = [], monitors = []) {
+function renderForm(role, form = {}, rows = [], monitors = [], jobs = []) {
     const canEditSite = role === "site" && !form.site_locked;
     const canEditDriver = role === "driver" && !form.driver_locked;
     const canEditLab = role === "lab" && !form.lab_locked;
@@ -337,7 +377,7 @@ input[readonly]{background:#f1f3f5;}
 .note-cell{font-weight:bold;line-height:1.3;background:#fff7e6;font-size:11px;}
 .main-grid{display:grid;grid-template-columns:150px 1fr;gap:8px;align-items:start;}
 .requisition-box{min-height:150px;}
-.monitor-table th,.monitor-table td{font-size:10px;}
+.monitor-table th,.monitor-table td,.job-table th,.job-table td{font-size:10px;}
 .table-scroll{overflow:visible;}
 .sample-table{table-layout:fixed;}
 .sample-table th{font-size:9px;line-height:1.1;}
@@ -362,25 +402,25 @@ button.primary{flex:1;}
 .danger{background:#b42318;}
 .success{background:#218838;}
 .hidden{display:none;}
-
-.missing-field,
-.required-empty{
-    border:1px solid #b7c0ca!important;
-    background:inherit!important;
-}
-
-.required-cell{
-    box-shadow:none;
-}
-
+.missing-field,.required-empty{border:1px solid #b7c0ca!important;background:inherit!important;}
+.required-cell{box-shadow:none;}
 .lock-badge{font-weight:bold;color:#7a4b00;}
+
+.modal-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.42);display:none;align-items:center;justify-content:center;z-index:9999;}
+.modal-card{width:420px;background:white;border-radius:8px;box-shadow:0 20px 45px rgba(0,0,0,.25);padding:22px;}
+.modal-card h3{margin:0 0 10px;color:#1f3a5f;font-size:18px;}
+.modal-card pre{white-space:pre-wrap;font-family:Arial,sans-serif;font-size:13px;line-height:1.35;color:#1f2933;background:#f5f7fa;border:1px solid #d8e0ea;padding:10px;border-radius:5px;max-height:260px;overflow:auto;}
+.modal-actions{display:flex;gap:10px;margin-top:14px;}
+.modal-actions button{flex:1;}
+.modal-actions .secondary-action{background:#eef4fb;color:#1f3a5f;border:1px solid #c9d8e8;}
+
 @page{size:A4 landscape;margin:8mm;}
 @media print{body{background:white;padding:0;}.form-shell{width:100%;min-height:auto;box-shadow:none;padding:0;}.button-row,.role-key,.instruction-box,.owner-box{display:none;}}
 </style>
 </head>
 <body>
 <div class="form-shell">
-<form method="POST" action="/add" onsubmit="return validateBeforeSave()">
+<form id="ecocForm" method="POST" action="/add">
 <input type="hidden" name="id" value="${escapeHtml(form.id)}">
 
 <div class="header">
@@ -493,6 +533,20 @@ ${isOwner && form.id ? `
         </table>
 
         ${canEditDriver ? `<button type="button" class="small-button" style="margin-top:6px;width:100%;" onclick="addMonitorRow()">Add Monitor</button>` : ""}
+
+        <table class="job-table">
+            <thead>
+                <tr>
+                    <th class="${activeRoleClass(role, "driver")}">Job Number</th>
+                    ${canEditDriver ? `<th>Action</th>` : ""}
+                </tr>
+            </thead>
+            <tbody id="jobRows">
+                ${renderJobRows(role, jobs, form)}
+            </tbody>
+        </table>
+
+        ${canEditDriver ? `<button type="button" class="small-button" style="margin-top:6px;width:100%;" onclick="addJobRow()">Add Job Number</button>` : ""}
     </div>
 
     <div class="table-scroll">
@@ -529,7 +583,20 @@ ${isOwner && form.id ? `
 </form>
 </div>
 
+<div id="validationModal" class="modal-backdrop">
+    <div class="modal-card">
+        <h3 id="validationTitle">Review Required</h3>
+        <pre id="validationMessage"></pre>
+        <div class="modal-actions">
+            <button type="button" class="secondary-action" onclick="closeValidationModal()">Go Back</button>
+            <button type="button" onclick="submitAnyway()">Save Anyway</button>
+        </div>
+    </div>
+</div>
+
 <script>
+let allowSubmit = false;
+
 function toggleOther(select, inputId){
     const input = document.getElementById(inputId);
     if(!input) return;
@@ -542,8 +609,6 @@ function toggleOther(select, inputId){
         input.removeAttribute("data-required-label");
         input.value = "";
     }
-
-    refreshRequiredHighlights();
 }
 
 function toggleRowOther(select){
@@ -558,8 +623,6 @@ function toggleRowOther(select){
         input.removeAttribute("data-required-label");
         input.value = "";
     }
-
-    refreshRequiredHighlights();
 }
 
 document.querySelectorAll('input[name="site_name"]').forEach(input => {
@@ -575,8 +638,6 @@ document.querySelectorAll('input[name="site_name"]').forEach(input => {
             other.removeAttribute("data-required-label");
             other.value = "";
         }
-
-        refreshRequiredHighlights();
     });
 });
 
@@ -618,14 +679,12 @@ function addSampleRow(){
     \`;
 
     tbody.appendChild(tr);
-    refreshRequiredHighlights();
 }
 
 function removeSampleRow(button){
     const rows = document.querySelectorAll(".sample-row");
     if(rows.length <= 1) return;
     button.closest("tr").remove();
-    refreshRequiredHighlights();
 }
 
 function addMonitorRow(){
@@ -643,53 +702,38 @@ function addMonitorRow(){
     \`;
 
     tbody.appendChild(tr);
-    refreshRequiredHighlights();
 }
 
 function removeMonitorRow(button){
     const rows = document.querySelectorAll(".monitor-row");
     if(rows.length <= 1) return;
     button.closest("tr").remove();
-    refreshRequiredHighlights();
 }
 
-function refreshRequiredHighlights(){
-    document.querySelectorAll(".required-empty").forEach(el => el.classList.remove("required-empty"));
-    document.querySelectorAll(".required-cell").forEach(el => el.classList.remove("required-cell"));
+function addJobRow(){
+    const tbody = document.getElementById("jobRows");
+    const tr = document.createElement("tr");
+    tr.className = "job-row";
 
-    const fields = Array.from(document.querySelectorAll("[data-required-label]"))
-        .filter(field => !field.disabled && !field.readOnly && !field.classList.contains("hidden"));
+    tr.innerHTML = \`
+        <td class="${activeRoleClass(role, "driver")}">
+            <input name="job_number[]" data-required-label="Job Number">
+        </td>
+        <td class="action-cell">
+            <button type="button" class="small-button danger" onclick="removeJobRow(this)">Remove</button>
+        </td>
+    \`;
 
-    fields.forEach(field => {
-        const type = field.getAttribute("type");
-        let empty = false;
-
-        if(type === "radio"){
-            const group = document.querySelectorAll('input[name="' + field.name + '"]');
-            empty = !Array.from(group).some(radio => radio.checked);
-
-            if(empty){
-                const groupBox = field.closest(".choice-group");
-                if(groupBox) groupBox.classList.add("required-empty");
-            }
-        } else {
-            empty = !String(field.value || "").trim();
-
-            if(empty){
-                field.classList.add("required-empty");
-            }
-        }
-
-        if(empty){
-            const cell = field.closest("td");
-            if(cell) cell.classList.add("required-cell");
-        }
-    });
+    tbody.appendChild(tr);
 }
 
-function validateBeforeSave(){
-    refreshRequiredHighlights();
+function removeJobRow(button){
+    const rows = document.querySelectorAll(".job-row");
+    if(rows.length <= 1) return;
+    button.closest("tr").remove();
+}
 
+function getMissingFields(){
     const fields = Array.from(document.querySelectorAll("[data-required-label]"))
         .filter(field => !field.disabled && !field.readOnly && !field.classList.contains("hidden"));
 
@@ -712,19 +756,85 @@ function validateBeforeSave(){
         }
     });
 
-    if(missing.length === 0) return true;
-
-    const message =
-        "The following field(s) have not been completed:\\n\\n" +
-        missing.map(item => "- " + item).join("\\n") +
-        "\\n\\nIf something should be blank, click OK to save anyway.\\nClick Cancel to go back and complete the form.";
-
-    return confirm(message);
+    return missing;
 }
 
-document.addEventListener("input", refreshRequiredHighlights);
-document.addEventListener("change", refreshRequiredHighlights);
-document.addEventListener("DOMContentLoaded", refreshRequiredHighlights);
+function getTemperatureWarnings(){
+    const warnings = [];
+
+    document.querySelectorAll(".sample-row").forEach((row, index) => {
+        const tempSelect = row.querySelector('select[name="shipping_temp[]"]');
+        const tempHidden = row.querySelector('input[type="hidden"][name="shipping_temp[]"]');
+        const pickupInput = row.querySelector('input[name="courier_pickup_temp[]"]');
+
+        if(!pickupInput || pickupInput.readOnly || pickupInput.disabled) return;
+
+        const selectedTemp = tempSelect && !tempSelect.disabled ? tempSelect.value : (tempHidden ? tempHidden.value : "");
+        const pickup = parseFloat(pickupInput.value);
+
+        if(isNaN(pickup)) return;
+
+        let min = null;
+        let max = null;
+
+        if(selectedTemp === "Ambient 15-25"){
+            min = 15;
+            max = 25;
+        }
+
+        if(selectedTemp === "Refrigerated 2-8"){
+            min = 2;
+            max = 8;
+        }
+
+        if(min === null || max === null) return;
+
+        if(pickup < min || pickup > max){
+            warnings.push("Sample row " + (index + 1) + ": pickup temperature " + pickup + "°C is outside " + selectedTemp + " range.");
+        }
+    });
+
+    return warnings;
+}
+
+function showValidationModal(title, message){
+    document.getElementById("validationTitle").textContent = title;
+    document.getElementById("validationMessage").textContent = message;
+    document.getElementById("validationModal").style.display = "flex";
+}
+
+function closeValidationModal(){
+    document.getElementById("validationModal").style.display = "none";
+}
+
+function submitAnyway(){
+    allowSubmit = true;
+    document.getElementById("ecocForm").submit();
+}
+
+document.getElementById("ecocForm").addEventListener("submit", function(event){
+    if(allowSubmit) return;
+
+    const missing = getMissingFields();
+    const tempWarnings = getTemperatureWarnings();
+    const messages = [];
+
+    if(missing.length){
+        messages.push("The following field(s) have not been completed:\\n" + missing.map(item => "- " + item).join("\\n"));
+    }
+
+    if(tempWarnings.length){
+        messages.push("Temperature warning(s):\\n" + tempWarnings.map(item => "- " + item).join("\\n"));
+    }
+
+    if(messages.length){
+        event.preventDefault();
+        showValidationModal(
+            "Review Before Saving",
+            messages.join("\\n\\n") + "\\n\\nChoose Go Back to review the form, or Save Anyway if this is intentional."
+        );
+    }
+});
 </script>
 </body>
 </html>
@@ -740,7 +850,11 @@ function getFormWithRows(id, callback) {
 
             db.all("SELECT * FROM coc_monitors WHERE form_id = ? ORDER BY row_order, id", [id], (monitorErr, monitors) => {
                 if (monitorErr) return callback(monitorErr);
-                callback(null, form, rows, monitors);
+
+                db.all("SELECT * FROM coc_job_numbers WHERE form_id = ? ORDER BY row_order, id", [id], (jobErr, jobs) => {
+                    if (jobErr) return callback(jobErr);
+                    callback(null, form, rows, monitors, jobs);
+                });
             });
         });
     });
@@ -806,6 +920,24 @@ function saveMonitors(formId, d, callback) {
         monitorSns.forEach((monitorSn, index) => {
             if (String(monitorSn || "").trim()) {
                 stmt.run([formId, index, monitorSn]);
+            }
+        });
+
+        stmt.finalize(callback);
+    });
+}
+
+function saveJobNumbers(formId, d, callback) {
+    const jobNumbers = normalizeArray(d.job_number);
+
+    db.run("DELETE FROM coc_job_numbers WHERE form_id = ?", [formId], err => {
+        if (err) return callback(err);
+
+        const stmt = db.prepare("INSERT INTO coc_job_numbers (form_id,row_order,job_number) VALUES (?,?,?)");
+
+        jobNumbers.forEach((jobNumber, index) => {
+            if (String(jobNumber || "").trim()) {
+                stmt.run([formId, index, jobNumber]);
             }
         });
 
@@ -901,7 +1033,7 @@ function lockRoleSection(formId, role, callback) {
 
 async function generatePdf(formId) {
     return new Promise((resolve, reject) => {
-        getFormWithRows(formId, async (err, form, rows, monitors) => {
+        getFormWithRows(formId, async (err, form, rows, monitors, jobs) => {
             if (err) return reject(err);
 
             const folderPath = path.join(__dirname, "eCOC IC Labs");
@@ -990,7 +1122,9 @@ async function generatePdf(formId) {
             cell(24, reqY + 34, 132, 34, "PID Number", form.pid, { fill: paleBlue, valueSize: 8.5 });
 
             const monitorText = monitors.length ? monitors.map(m => m.monitor_sn).join("\n") : "-";
-            cell(24, reqY + 68, 132, 64, "Monitor S/N", monitorText, { fill: "#ffffff", valueSize: 7 });
+            const jobText = jobs.length ? jobs.map(j => j.job_number).join("\n") : "-";
+            cell(24, reqY + 68, 132, 52, "Monitor S/N", monitorText, { fill: "#ffffff", valueSize: 7 });
+            cell(24, reqY + 120, 132, 52, "Job Number", jobText, { fill: "#ffffff", valueSize: 7 });
 
             const tableX = 166;
             let tableY = reqY;
@@ -1040,6 +1174,93 @@ async function generatePdf(formId) {
             stream.on("finish", resolve);
             stream.on("error", reject);
         });
+    });
+}
+
+async function generateQrPdf(req) {
+    return new Promise((resolve, reject) => {
+        const qrFolder = path.join(__dirname, "eCOC QR Codes");
+        if (!fs.existsSync(qrFolder)) fs.mkdirSync(qrFolder);
+
+        const date = todayDate();
+        const filePath = path.join(qrFolder, `eCOC_QR_${date}.pdf`);
+        const baseUrl = `${req.protocol}://${req.get("host")}`;
+
+        db.all(
+            "SELECT id, requisition_number, pid, site_name, shipping_date FROM coc_forms WHERE shipping_date = ? ORDER BY id",
+            [date],
+            async (err, forms) => {
+                if (err) return reject(err);
+
+                const doc = new PDFDocument({ margin: 40, size: "A4" });
+                const stream = fs.createWriteStream(filePath);
+                doc.pipe(stream);
+
+                const logoPath = path.join(__dirname, "IC_Labs_Logo.png");
+                if (fs.existsSync(logoPath)) doc.image(logoPath, 40, 30, { width: 95 });
+
+                doc.font("Helvetica-Bold").fontSize(18).fillColor("#1f3a5f")
+                    .text("Today's eCOC QR Codes", 0, 45, { align: "center" });
+
+                doc.font("Helvetica").fontSize(10).fillColor("#202833")
+                    .text(`Date: ${date}`, 0, 70, { align: "center" });
+
+                let x = 45;
+                let y = 120;
+                const cardW = 240;
+                const cardH = 160;
+
+                if (!forms.length) {
+                    doc.fontSize(12).text("No eCOCs found for today's shipping date.", 40, 130);
+                }
+
+                for (let i = 0; i < forms.length; i++) {
+                    const form = forms[i];
+
+                    if (y + cardH > 760) {
+                        doc.addPage();
+                        x = 45;
+                        y = 60;
+                    }
+
+                    const link = `${baseUrl}/form/${form.id}`;
+                    const qrBuffer = await QRCode.toBuffer(link, { width: 110, margin: 1 });
+
+                    doc.rect(x, y, cardW, cardH).stroke("#9aa6b2");
+                    doc.image(qrBuffer, x + 10, y + 18, { width: 105 });
+
+                    doc.font("Helvetica-Bold").fontSize(9).fillColor("#1f3a5f")
+                        .text("Requisition:", x + 125, y + 18, { width: 105 });
+                    doc.font("Helvetica").fontSize(9).fillColor("#202833")
+                        .text(form.requisition_number || "-", x + 125, y + 31, { width: 105 });
+
+                    doc.font("Helvetica-Bold").fontSize(9).fillColor("#1f3a5f")
+                        .text("PID:", x + 125, y + 55, { width: 105 });
+                    doc.font("Helvetica").fontSize(9).fillColor("#202833")
+                        .text(form.pid || "-", x + 125, y + 68, { width: 105 });
+
+                    doc.font("Helvetica-Bold").fontSize(9).fillColor("#1f3a5f")
+                        .text("Site:", x + 125, y + 92, { width: 105 });
+                    doc.font("Helvetica").fontSize(7).fillColor("#202833")
+                        .text(form.site_name || "-", x + 125, y + 105, { width: 105, height: 38 });
+
+                    doc.font("Helvetica").fontSize(6).fillColor("#5b6775")
+                        .text(link, x + 10, y + 133, { width: cardW - 20 });
+
+                    if (x === 45) {
+                        x = 310;
+                    } else {
+                        x = 45;
+                        y += cardH + 25;
+                    }
+                }
+
+                doc.end();
+
+                stream.on("finish", () => resolve(filePath));
+                stream.on("error", reject);
+            }
+        );
     });
 }
 
@@ -1097,7 +1318,9 @@ app.post("/login", (req, res) => {
 
     if (users[role] && password === users[role]) {
         req.session.role = role;
-        return res.redirect("/search");
+        const destination = req.session.returnTo || "/search";
+        delete req.session.returnTo;
+        return res.redirect(destination);
     }
 
     res.send(renderAuthCard("Login Failed", `
@@ -1133,6 +1356,7 @@ app.get("/search", requireLogin, (req, res) => {
             </form>
         ` : ""}
 
+        <a class="link-button secondary" href="/qr-today">Today's QR Codes</a>
         <a class="link-button secondary" href="/view-pdfs">View Generated PDFs</a>
         <a class="link-button secondary" href="/logout">Log Out</a>
     `));
@@ -1161,16 +1385,16 @@ app.get("/form", requireRole("site"), (req, res) => {
     const newReq = req.query.newReq;
     const form = newReq ? { requisition_number: newReq, site_locked: 0, driver_locked: 0, lab_locked: 0 } : { site_locked: 0, driver_locked: 0, lab_locked: 0 };
 
-    res.send(renderForm(role, form, [{}], [{}]));
+    res.send(renderForm(role, form, [{}], [{}], [{}]));
 });
 
 app.get("/form/:id", requireLogin, (req, res) => {
     const role = req.session.role;
     const id = req.params.id;
 
-    getFormWithRows(id, (err, form, rows, monitors) => {
+    getFormWithRows(id, (err, form, rows, monitors, jobs) => {
         if (err) return res.send("Record not found");
-        res.send(renderForm(role, form, rows, monitors));
+        res.send(renderForm(role, form, rows, monitors, jobs));
     });
 });
 
@@ -1238,7 +1462,7 @@ app.post("/add", requireRole("site", "driver", "lab"), (req, res) => {
                 saveRowsDirectly(d.id, mergedRows, rowErr => {
                     if (rowErr) return res.send("Sample Row Error: " + rowErr.message);
 
-                    const afterMonitor = () => {
+                    const afterDriverDetails = () => {
                         lockRoleSection(d.id, role, async lockErr => {
                             if (lockErr) return res.send("Lock Error: " + lockErr.message);
 
@@ -1255,10 +1479,14 @@ app.post("/add", requireRole("site", "driver", "lab"), (req, res) => {
                     if (role === "driver") {
                         saveMonitors(d.id, d, monitorErr => {
                             if (monitorErr) return res.send("Monitor Error: " + monitorErr.message);
-                            afterMonitor();
+
+                            saveJobNumbers(d.id, d, jobErr => {
+                                if (jobErr) return res.send("Job Number Error: " + jobErr.message);
+                                afterDriverDetails();
+                            });
                         });
                     } else {
-                        afterMonitor();
+                        afterDriverDetails();
                     }
                 });
             });
@@ -1350,6 +1578,15 @@ app.post("/owner/:id/access", requireRole("owner"), (req, res) => {
         if (err) return res.send("Access update error: " + err.message);
         res.redirect(`/form/${id}`);
     });
+});
+
+app.get("/qr-today", requireLogin, async (req, res) => {
+    try {
+        const filePath = await generateQrPdf(req);
+        res.download(filePath, path.basename(filePath));
+    } catch (err) {
+        res.send("QR PDF error: " + err.message);
+    }
 });
 
 app.get("/view-pdfs", requireLogin, (req, res) => {
