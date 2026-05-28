@@ -12,12 +12,13 @@
   "type": "commonjs",
   "dependencies": {
     "body-parser": "^2.2.2",
-    "bwip-js": "^4.8.0",
+    "bwip-js": "^4.10.2",
     "express": "^5.2.1",
     "express-session": "^1.19.0",
     "googleapis": "^171.4.0",
     "nodemailer": "^8.0.1",
     "pdfkit": "^0.17.2",
+    "pg": "^8.21.0",
     "qrcode": "^1.5.4",
     "sqlite3": "^5.1.7",
     "uuid": "^13.0.0"
