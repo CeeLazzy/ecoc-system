@@ -1047,6 +1047,8 @@ button,.link-button{display:block;box-sizing:border-box;width:100%;margin-top:14
 .secondary{background:#eef4fb;color:#1f3a5f;border:1px solid #c9d8e8;}
 .status-message{min-height:18px;margin:10px 0 0;font-size:12px;color:#5b6775;text-align:left;}
 .scanner-preview{display:none;width:100%;margin-top:12px;border-radius:6px;background:#101820;}
+.qr-reader{display:none;width:100%;margin-top:12px;}
+.qr-reader video{border-radius:6px;}
 hr{border:none;border-top:1px solid #e1e7ef;margin:24px 0;}
 </style>
 </head>
@@ -1114,17 +1116,21 @@ app.get("/search", requireLogin, (req, res) => {
             <button type="submit">Load Form</button>
             <button type="button" id="scanButton" class="secondary">Scan Barcode</button>
             <video id="scannerPreview" class="scanner-preview" playsinline muted></video>
+            <div id="qrReader" class="qr-reader"></div>
             <div id="scanStatus" class="status-message"></div>
         </form>
 
+        <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
         <script>
         (() => {
             const form = document.getElementById("searchForm");
             const input = document.getElementById("reqnum");
             const scanButton = document.getElementById("scanButton");
             const video = document.getElementById("scannerPreview");
+            const qrReader = document.getElementById("qrReader");
             const status = document.getElementById("scanStatus");
             let activeStream = null;
+            let html5Scanner = null;
             let scanning = false;
 
             function setStatus(message) {
@@ -1136,6 +1142,17 @@ app.get("/search", requireLogin, (req, res) => {
                 if (activeStream) {
                     activeStream.getTracks().forEach(track => track.stop());
                     activeStream = null;
+                }
+                if (html5Scanner) {
+                    html5Scanner.stop()
+                        .then(() => html5Scanner.clear())
+                        .catch(() => {})
+                        .finally(() => {
+                            html5Scanner = null;
+                            qrReader.style.display = "none";
+                        });
+                } else {
+                    qrReader.style.display = "none";
                 }
                 video.style.display = "none";
                 video.srcObject = null;
@@ -1164,6 +1181,40 @@ app.get("/search", requireLogin, (req, res) => {
                 form.submit();
             }
 
+            async function startHtml5Scanner() {
+                if (!window.Html5Qrcode) {
+                    setStatus("iPhone scanner library could not load. Check your internet connection, then refresh this page.");
+                    return;
+                }
+
+                qrReader.style.display = "block";
+                video.style.display = "none";
+                scanButton.textContent = "Stop Scanning";
+                setStatus("Point the camera at the barcode.");
+                scanning = true;
+
+                const formatsToSupport = [
+                    Html5QrcodeSupportedFormats.QR_CODE,
+                    Html5QrcodeSupportedFormats.CODE_128,
+                    Html5QrcodeSupportedFormats.CODE_39,
+                    Html5QrcodeSupportedFormats.CODE_93,
+                    Html5QrcodeSupportedFormats.CODABAR,
+                    Html5QrcodeSupportedFormats.EAN_13,
+                    Html5QrcodeSupportedFormats.EAN_8,
+                    Html5QrcodeSupportedFormats.ITF,
+                    Html5QrcodeSupportedFormats.UPC_A,
+                    Html5QrcodeSupportedFormats.UPC_E
+                ].filter(Boolean);
+
+                html5Scanner = new Html5Qrcode("qrReader", { formatsToSupport });
+                await html5Scanner.start(
+                    { facingMode: "environment" },
+                    { fps: 10, qrbox: { width: 250, height: 160 } },
+                    decodedText => submitScannedValue(decodedText),
+                    () => {}
+                );
+            }
+
             scanButton.addEventListener("click", async () => {
                 if (scanning) {
                     stopScanner();
@@ -1177,7 +1228,12 @@ app.get("/search", requireLogin, (req, res) => {
                 }
 
                 if (!("BarcodeDetector" in window)) {
-                    setStatus("Barcode scanning is not supported here. Use Chrome or Edge, or scan with a USB scanner into the box.");
+                    try {
+                        await startHtml5Scanner();
+                    } catch (error) {
+                        stopScanner();
+                        setStatus("Camera permission was blocked or the barcode scanner could not start.");
+                    }
                     return;
                 }
 
