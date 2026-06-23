@@ -1005,8 +1005,8 @@ async function generateSiteQrPdfBuffer(req, targetSlug) {
                 y = 60;
             }
 
-            const link = `${baseUrl}/form/${form.id}`;
-            const qrBuffer = await QRCode.toBuffer(link, { width: 110, margin: 1 });
+            const qrValue = form.requisition_number || `${baseUrl}/form/${form.id}`;
+            const qrBuffer = await QRCode.toBuffer(qrValue, { width: 110, margin: 1 });
 
             doc.rect(x, y, 240, 150).stroke("#9aa6b2");
             doc.image(qrBuffer, x + 10, y + 20, { width: 105 });
@@ -1017,7 +1017,7 @@ async function generateSiteQrPdfBuffer(req, targetSlug) {
             doc.font("Helvetica-Bold").fontSize(9).fillColor("#1f3a5f").text("PID:", x + 125, y + 62);
             doc.font("Helvetica").fontSize(9).fillColor("#202833").text(form.pid || "-", x + 125, y + 76, { width: 100 });
 
-            doc.font("Helvetica").fontSize(6).fillColor("#5b6775").text(link, x + 10, y + 130, { width: 220 });
+            doc.font("Helvetica").fontSize(6).fillColor("#5b6775").text(`QR value: ${qrValue}`, x + 10, y + 130, { width: 220 });
 
             if (x === 45) x = 310;
             else {
