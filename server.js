@@ -1049,6 +1049,7 @@ button,.link-button{display:block;box-sizing:border-box;width:100%;margin-top:14
 .scanner-preview{display:none;width:100%;margin-top:12px;border-radius:6px;background:#101820;}
 .qr-reader{display:none;width:100%;margin-top:12px;}
 .qr-reader video{border-radius:6px;}
+.scan-file-input{display:none;}
 hr{border:none;border-top:1px solid #e1e7ef;margin:24px 0;}
 </style>
 </head>
@@ -1115,6 +1116,8 @@ app.get("/search", requireLogin, (req, res) => {
             <input id="reqnum" name="reqnum" placeholder="Scan or enter Requisition Number" autocomplete="off" autofocus>
             <button type="submit">Load Form</button>
             <button type="button" id="scanButton" class="secondary">Scan Barcode</button>
+            <button type="button" id="scanPhotoButton" class="secondary">Scan From Photo</button>
+            <input id="scanPhotoInput" class="scan-file-input" type="file" accept="image/*">
             <video id="scannerPreview" class="scanner-preview" playsinline muted></video>
             <div id="qrReader" class="qr-reader"></div>
             <div id="scanStatus" class="status-message"></div>
@@ -1126,6 +1129,8 @@ app.get("/search", requireLogin, (req, res) => {
             const form = document.getElementById("searchForm");
             const input = document.getElementById("reqnum");
             const scanButton = document.getElementById("scanButton");
+            const scanPhotoButton = document.getElementById("scanPhotoButton");
+            const scanPhotoInput = document.getElementById("scanPhotoInput");
             const video = document.getElementById("scannerPreview");
             const qrReader = document.getElementById("qrReader");
             const status = document.getElementById("scanStatus");
@@ -1159,7 +1164,7 @@ app.get("/search", requireLogin, (req, res) => {
                 scanButton.textContent = "Scan Barcode";
             }
 
-            function submitScannedValue(rawValue) {
+            function submitScannedValue(rawValue, shouldSubmit = true) {
                 let value = String(rawValue || "").trim();
                 if (!value) return;
 
@@ -1177,8 +1182,11 @@ app.get("/search", requireLogin, (req, res) => {
 
                 value = value.replace(/^(req|requisition|requisition number)\\s*[:#-]?\\s*/i, "").trim();
                 input.value = value;
+                setStatus("Scanned: " + value);
                 stopScanner();
-                form.submit();
+                if (shouldSubmit) {
+                    setTimeout(() => form.submit(), 350);
+                }
             }
 
             async function startHtml5Scanner() {
@@ -1192,6 +1200,11 @@ app.get("/search", requireLogin, (req, res) => {
                 scanButton.textContent = "Stop Scanning";
                 setStatus("Point the camera at the barcode.");
                 scanning = true;
+
+                const qrbox = viewfinderWidth => {
+                    const edge = Math.min(Math.floor(viewfinderWidth * 0.72), 280);
+                    return { width: edge, height: edge };
+                };
 
                 const formatsToSupport = [
                     Html5QrcodeSupportedFormats.QR_CODE,
@@ -1209,11 +1222,37 @@ app.get("/search", requireLogin, (req, res) => {
                 html5Scanner = new Html5Qrcode("qrReader", { formatsToSupport });
                 await html5Scanner.start(
                     { facingMode: "environment" },
-                    { fps: 10, qrbox: { width: 250, height: 160 } },
+                    { fps: 10, qrbox, aspectRatio: 1.333334, disableFlip: false },
                     decodedText => submitScannedValue(decodedText),
                     () => {}
                 );
             }
+
+            scanPhotoButton.addEventListener("click", () => {
+                scanPhotoInput.click();
+            });
+
+            scanPhotoInput.addEventListener("change", async event => {
+                const file = event.target.files && event.target.files[0];
+                if (!file) return;
+
+                if (!window.Html5Qrcode) {
+                    setStatus("Photo scanner library could not load. Refresh this page and try again.");
+                    return;
+                }
+
+                try {
+                    setStatus("Reading barcode from photo...");
+                    const photoScanner = new Html5Qrcode("qrReader");
+                    const decodedText = await photoScanner.scanFile(file, true);
+                    await photoScanner.clear();
+                    submitScannedValue(decodedText);
+                } catch (error) {
+                    setStatus("No QR code was found in that photo. Try a clearer, closer photo.");
+                } finally {
+                    scanPhotoInput.value = "";
+                }
+            });
 
             scanButton.addEventListener("click", async () => {
                 if (scanning) {
