@@ -32,9 +32,6 @@ const pool = new Pool({
 const roles = ["site", "driver", "lab", "owner"];
 
 const defaultUsers = [
-    { username: "site", password: process.env.DEFAULT_SITE_PASSWORD || "site123", role: "site", fullName: "Site User" },
-    { username: "driver", password: process.env.DEFAULT_DRIVER_PASSWORD || "driver123", role: "driver", fullName: "Driver User" },
-    { username: "lab", password: process.env.DEFAULT_LAB_PASSWORD || "lab123", role: "lab", fullName: "Lab User" },
     { username: "owner", password: process.env.DEFAULT_OWNER_PASSWORD || "owner123", role: "owner", fullName: "Owner Admin" }
 ];
 
@@ -1270,13 +1267,25 @@ app.post("/users", requireRole("owner"), async (req, res) => {
 
     const passwordData = hashPassword(password);
     try {
-        const insert = await pool.query(`
-            INSERT INTO app_users (username, full_name, role, password_salt, password_hash)
-            VALUES ($1,$2,$3,$4,$5)
-            RETURNING id, username, full_name, role
-        `, [username, fullName, role, passwordData.salt, passwordData.hash]);
+        const existing = await pool.query("SELECT id, username, full_name, role, active FROM app_users WHERE lower(username)=lower($1)", [username]);
+        if (existing.rows[0] && existing.rows[0].active) {
+            return res.send(`Username already exists: ${escapeHtml(username)}. Delete or choose a different username.`);
+        }
 
-        await auditLog(req, "user_created", {
+        const insert = existing.rows[0]
+            ? await pool.query(`
+                UPDATE app_users
+                SET full_name=$1, role=$2, password_salt=$3, password_hash=$4, active=TRUE, updated_at=CURRENT_TIMESTAMP
+                WHERE id=$5
+                RETURNING id, username, full_name, role
+            `, [fullName, role, passwordData.salt, passwordData.hash, existing.rows[0].id])
+            : await pool.query(`
+                INSERT INTO app_users (username, full_name, role, password_salt, password_hash)
+                VALUES ($1,$2,$3,$4,$5)
+                RETURNING id, username, full_name, role
+            `, [username, fullName, role, passwordData.salt, passwordData.hash]);
+
+        await auditLog(req, existing.rows[0] ? "user_reactivated" : "user_created", {
             details: {
                 created_user: insert.rows[0]
             }
