@@ -1245,6 +1245,11 @@ app.get("/users", requireRole("owner"), async (req, res) => {
             <div style="text-align:left;border-bottom:1px solid #e1e7ef;padding:10px 0;">
                 <strong>${escapeHtml(user.full_name)}</strong><br>
                 <span>${escapeHtml(user.username)} - ${escapeHtml(user.role.toUpperCase())} - ${user.active ? "Active" : "Inactive"}</span>
+                ${user.active ? `
+                    <form method="POST" action="/users/${user.id}/delete" onsubmit="return confirm('Delete this user login? Their audit history will be kept.');">
+                        <button type="submit" class="secondary">Delete User</button>
+                    </form>
+                ` : ""}
             </div>
         `).join("") || "<p>No users yet.</p>"}
 
@@ -1281,6 +1286,38 @@ app.post("/users", requireRole("owner"), async (req, res) => {
     } catch (err) {
         res.send("User creation error: " + err.message);
     }
+});
+
+app.post("/users/:id/delete", requireRole("owner"), async (req, res) => {
+    const userId = Number(req.params.id);
+    if (!Number.isInteger(userId)) return res.send("Invalid user id.");
+    if (userId === Number(req.session.userId)) return res.send("You cannot delete your own active login.");
+
+    const result = await pool.query("SELECT id, username, full_name, role, active FROM app_users WHERE id=$1", [userId]);
+    const user = result.rows[0];
+    if (!user) return res.send("User not found.");
+    if (!user.active) return res.redirect("/users");
+
+    if (user.role === "owner") {
+        const ownerCount = await pool.query("SELECT COUNT(*)::int AS count FROM app_users WHERE role='owner' AND active=TRUE AND id<>$1", [userId]);
+        if (!ownerCount.rows[0] || ownerCount.rows[0].count < 1) {
+            return res.send("You cannot delete the last active owner account.");
+        }
+    }
+
+    await pool.query("UPDATE app_users SET active=FALSE, updated_at=CURRENT_TIMESTAMP WHERE id=$1", [userId]);
+    await auditLog(req, "user_deleted", {
+        details: {
+            deleted_user: {
+                id: user.id,
+                username: user.username,
+                full_name: user.full_name,
+                role: user.role
+            }
+        }
+    });
+
+    res.redirect("/users");
 });
 
 app.get("/audit", requireRole("owner"), async (req, res) => {
