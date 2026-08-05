@@ -1217,7 +1217,7 @@ app.get("/logout", (req, res) => {
 });
 
 app.get("/users", requireRole("owner"), async (req, res) => {
-    const result = await pool.query("SELECT id, username, full_name, role, active, created_at FROM app_users ORDER BY role, full_name");
+    const result = await pool.query("SELECT id, username, full_name, role, active, created_at FROM app_users WHERE active=TRUE ORDER BY role, full_name");
 
     res.send(renderAuthCard("Manage Users", `
         <h1>Manage Users</h1>
@@ -1241,12 +1241,10 @@ app.get("/users", requireRole("owner"), async (req, res) => {
         ${result.rows.map(user => `
             <div style="text-align:left;border-bottom:1px solid #e1e7ef;padding:10px 0;">
                 <strong>${escapeHtml(user.full_name)}</strong><br>
-                <span>${escapeHtml(user.username)} - ${escapeHtml(user.role.toUpperCase())} - ${user.active ? "Active" : "Inactive"}</span>
-                ${user.active ? `
-                    <form method="POST" action="/users/${user.id}/delete" onsubmit="return confirm('Delete this user login? Their audit history will be kept.');">
-                        <button type="submit" class="secondary">Delete User</button>
-                    </form>
-                ` : ""}
+                <span>${escapeHtml(user.username)} - ${escapeHtml(user.role.toUpperCase())}</span>
+                <form method="POST" action="/users/${user.id}/delete" onsubmit="return confirm('Delete this user login? Their audit history will be kept.');">
+                    <button type="submit" class="secondary">Delete User</button>
+                </form>
             </div>
         `).join("") || "<p>No users yet.</p>"}
 
