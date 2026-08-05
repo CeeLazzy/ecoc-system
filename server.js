@@ -6,6 +6,7 @@ const QRCode = require("qrcode");
 const bwipjs = require("bwip-js");
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -28,14 +29,14 @@ const pool = new Pool({
         : false
 });
 
-const users = {
-    site: "site123",
-    driver: "driver123",
-    lab: "lab123",
-    owner: "owner123"
-};
-
 const roles = ["site", "driver", "lab", "owner"];
+
+const defaultUsers = [
+    { username: "site", password: process.env.DEFAULT_SITE_PASSWORD || "site123", role: "site", fullName: "Site User" },
+    { username: "driver", password: process.env.DEFAULT_DRIVER_PASSWORD || "driver123", role: "driver", fullName: "Driver User" },
+    { username: "lab", password: process.env.DEFAULT_LAB_PASSWORD || "lab123", role: "lab", fullName: "Lab User" },
+    { username: "owner", password: process.env.DEFAULT_OWNER_PASSWORD || "owner123", role: "owner", fullName: "Owner Admin" }
+];
 
 const protocolOptions = ["TBD15-201", "Brilliant B011", "Align", "Transgender", "Other"];
 
@@ -65,6 +66,37 @@ const shippingTempOptions = [
 ];
 
 async function initDb() {
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS app_users (
+            id SERIAL PRIMARY KEY,
+            username TEXT UNIQUE NOT NULL,
+            full_name TEXT NOT NULL,
+            role TEXT NOT NULL CHECK (role IN ('site','driver','lab','owner')),
+            password_salt TEXT NOT NULL,
+            password_hash TEXT NOT NULL,
+            active BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS audit_events (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER REFERENCES app_users(id) ON DELETE SET NULL,
+            username TEXT,
+            full_name TEXT,
+            role TEXT,
+            action TEXT NOT NULL,
+            form_id INTEGER,
+            requisition_number TEXT,
+            details JSONB,
+            ip_address TEXT,
+            user_agent TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+
     await pool.query(`
         CREATE TABLE IF NOT EXISTS coc_forms (
             id SERIAL PRIMARY KEY,
@@ -122,6 +154,15 @@ async function initDb() {
             job_number TEXT
         )
     `);
+
+    for (const user of defaultUsers) {
+        const password = hashPassword(user.password);
+        await pool.query(`
+            INSERT INTO app_users (username, full_name, role, password_salt, password_hash)
+            VALUES ($1,$2,$3,$4,$5)
+            ON CONFLICT (username) DO NOTHING
+        `, [user.username, user.fullName, user.role, password.salt, password.hash]);
+    }
 }
 
 initDb().catch(err => {
@@ -129,8 +170,67 @@ initDb().catch(err => {
     process.exit(1);
 });
 
+function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
+    const hash = crypto.pbkdf2Sync(String(password), salt, 120000, 64, "sha512").toString("hex");
+    return { salt, hash };
+}
+
+function verifyPassword(password, salt, expectedHash) {
+    const { hash } = hashPassword(password, salt);
+    return crypto.timingSafeEqual(Buffer.from(hash, "hex"), Buffer.from(expectedHash, "hex"));
+}
+
+function getClientIp(req) {
+    return (req.headers["x-forwarded-for"] || req.socket.remoteAddress || "")
+        .toString()
+        .split(",")[0]
+        .trim();
+}
+
+async function auditLog(req, action, options = {}) {
+    try {
+        const details = options.details === undefined ? null : JSON.stringify(options.details);
+        await pool.query(`
+            INSERT INTO audit_events (
+                user_id, username, full_name, role, action, form_id,
+                requisition_number, details, ip_address, user_agent
+            )
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10)
+        `, [
+            req.session && req.session.userId ? req.session.userId : options.userId || null,
+            req.session && req.session.username ? req.session.username : options.username || null,
+            req.session && req.session.fullName ? req.session.fullName : options.fullName || null,
+            req.session && req.session.role ? req.session.role : options.role || null,
+            action,
+            options.formId || null,
+            options.requisitionNumber || null,
+            details,
+            getClientIp(req),
+            req.headers["user-agent"] || null
+        ]);
+    } catch (err) {
+        console.error("Audit log failed:", err.message);
+    }
+}
+
+function diffValues(before, after, fields) {
+    const changes = {};
+    for (const field of fields) {
+        const oldValue = before ? before[field] : undefined;
+        const newValue = after ? after[field] : undefined;
+        const oldText = oldValue === null || oldValue === undefined ? "" : String(oldValue);
+        const newText = newValue === null || newValue === undefined ? "" : String(newValue);
+        if (oldText !== newText) changes[field] = { from: oldValue ?? null, to: newValue ?? null };
+    }
+    return changes;
+}
+
+function userLabel(user) {
+    return `${user.full_name} (${user.username}, ${user.role})`;
+}
+
 function requireLogin(req, res, next) {
-    if (!req.session || !req.session.role) {
+    if (!req.session || !req.session.userId || !req.session.role) {
         if (req.session) req.session.returnTo = req.originalUrl;
         return res.redirect("/login");
     }
@@ -139,7 +239,7 @@ function requireLogin(req, res, next) {
 
 function requireRole(...allowedRoles) {
     return (req, res, next) => {
-        if (!req.session || !req.session.role) {
+        if (!req.session || !req.session.userId || !req.session.role) {
             if (req.session) req.session.returnTo = req.originalUrl;
             return res.redirect("/login");
         }
@@ -1069,47 +1169,187 @@ app.get("/login", (req, res) => {
         <h1>IC Labs eCOC Login</h1>
         <p>Electronic Chain of Custody Access</p>
         <form method="POST" action="/login">
-            <label>Role</label>
-            <select name="role">
-                <option value="site">Site</option>
-                <option value="driver">Driver</option>
-                <option value="lab">Lab</option>
-                <option value="owner">Owner</option>
-            </select>
+            <label>Username</label>
+            <input name="username" autocomplete="username" autofocus>
             <label>Password</label>
-            <input type="password" name="password">
+            <input type="password" name="password" autocomplete="current-password">
             <button type="submit">Sign In</button>
         </form>
     `));
 });
 
-app.post("/login", (req, res) => {
-    const { role, password } = req.body;
+app.post("/login", async (req, res) => {
+    const username = String(req.body.username || "").trim().toLowerCase();
+    const password = String(req.body.password || "");
 
-    if (users[role] && password === users[role]) {
-        req.session.role = role;
+    const result = await pool.query("SELECT * FROM app_users WHERE lower(username)=lower($1)", [username]);
+    const user = result.rows[0];
+
+    if (user && user.active && verifyPassword(password, user.password_salt, user.password_hash)) {
+        req.session.userId = user.id;
+        req.session.username = user.username;
+        req.session.fullName = user.full_name;
+        req.session.role = user.role;
+        await auditLog(req, "login_success", {
+            userId: user.id,
+            username: user.username,
+            fullName: user.full_name,
+            role: user.role
+        });
         const destination = req.session.returnTo || "/search";
         delete req.session.returnTo;
         return res.redirect(destination);
     }
 
+    await auditLog(req, "login_failed", {
+        username,
+        details: { reason: user && !user.active ? "inactive_user" : "invalid_credentials" }
+    });
+
     res.send(renderAuthCard("Login Failed", `
         <h1>Login Failed</h1>
-        <p>Invalid role or password.</p>
+        <p>Invalid username or password.</p>
         <a class="link-button" href="/login">Try Again</a>
     `));
 });
 
 app.get("/logout", (req, res) => {
-    req.session.destroy(() => res.redirect("/login"));
+    auditLog(req, "logout").finally(() => {
+        req.session.destroy(() => res.redirect("/login"));
+    });
+});
+
+app.get("/users", requireRole("owner"), async (req, res) => {
+    const result = await pool.query("SELECT id, username, full_name, role, active, created_at FROM app_users ORDER BY role, full_name");
+
+    res.send(renderAuthCard("Manage Users", `
+        <h1>Manage Users</h1>
+        <p>Create individual logins for each person</p>
+
+        <form method="POST" action="/users">
+            <label>Full Name</label>
+            <input name="full_name" required>
+            <label>Username</label>
+            <input name="username" required autocomplete="off">
+            <label>Role</label>
+            <select name="role" required>
+                ${roles.map(role => `<option value="${role}">${escapeHtml(role.toUpperCase())}</option>`).join("")}
+            </select>
+            <label>Temporary Password</label>
+            <input type="password" name="password" required autocomplete="new-password">
+            <button type="submit">Create User</button>
+        </form>
+
+        <hr>
+        ${result.rows.map(user => `
+            <div style="text-align:left;border-bottom:1px solid #e1e7ef;padding:10px 0;">
+                <strong>${escapeHtml(user.full_name)}</strong><br>
+                <span>${escapeHtml(user.username)} - ${escapeHtml(user.role.toUpperCase())} - ${user.active ? "Active" : "Inactive"}</span>
+            </div>
+        `).join("") || "<p>No users yet.</p>"}
+
+        <a class="link-button secondary" href="/audit">Audit Trail</a>
+        <a class="link-button" href="/search">Back</a>
+    `));
+});
+
+app.post("/users", requireRole("owner"), async (req, res) => {
+    const username = String(req.body.username || "").trim().toLowerCase();
+    const fullName = String(req.body.full_name || "").trim();
+    const role = String(req.body.role || "").trim();
+    const password = String(req.body.password || "");
+
+    if (!username || !fullName || !roles.includes(role) || !password) {
+        return res.send("Missing or invalid user details.");
+    }
+
+    const passwordData = hashPassword(password);
+    try {
+        const insert = await pool.query(`
+            INSERT INTO app_users (username, full_name, role, password_salt, password_hash)
+            VALUES ($1,$2,$3,$4,$5)
+            RETURNING id, username, full_name, role
+        `, [username, fullName, role, passwordData.salt, passwordData.hash]);
+
+        await auditLog(req, "user_created", {
+            details: {
+                created_user: insert.rows[0]
+            }
+        });
+
+        res.redirect("/users");
+    } catch (err) {
+        res.send("User creation error: " + err.message);
+    }
+});
+
+app.get("/audit", requireRole("owner"), async (req, res) => {
+    const username = String(req.query.username || "").trim();
+    const requisition = String(req.query.req || "").trim();
+    const action = String(req.query.action || "").trim();
+
+    const clauses = [];
+    const values = [];
+    if (username) {
+        values.push(`%${username}%`);
+        clauses.push(`username ILIKE $${values.length}`);
+    }
+    if (requisition) {
+        values.push(`%${requisition}%`);
+        clauses.push(`requisition_number ILIKE $${values.length}`);
+    }
+    if (action) {
+        values.push(action);
+        clauses.push(`action=$${values.length}`);
+    }
+
+    const result = await pool.query(`
+        SELECT * FROM audit_events
+        ${clauses.length ? `WHERE ${clauses.join(" AND ")}` : ""}
+        ORDER BY created_at DESC
+        LIMIT 200
+    `, values);
+
+    const actions = await pool.query("SELECT DISTINCT action FROM audit_events ORDER BY action");
+
+    res.send(renderAuthCard("Audit Trail", `
+        <h1>Audit Trail</h1>
+        <p>Latest 200 events</p>
+        <form method="GET" action="/audit">
+            <label>Username</label>
+            <input name="username" value="${escapeHtml(username)}">
+            <label>Requisition Number</label>
+            <input name="req" value="${escapeHtml(requisition)}">
+            <label>Action</label>
+            <select name="action">
+                <option value="">All actions</option>
+                ${actions.rows.map(row => `<option value="${escapeHtml(row.action)}" ${selected(action, row.action)}>${escapeHtml(row.action)}</option>`).join("")}
+            </select>
+            <button type="submit">Filter</button>
+        </form>
+        <hr>
+        ${result.rows.map(event => `
+            <div style="text-align:left;border-bottom:1px solid #e1e7ef;padding:10px 0;font-size:12px;">
+                <strong>${escapeHtml(formatDateTime(event.created_at))}</strong><br>
+                ${escapeHtml(event.action)} by ${escapeHtml(event.full_name || event.username || "Unknown")} ${event.role ? `(${escapeHtml(event.role)})` : ""}<br>
+                ${event.requisition_number ? `Req: ${escapeHtml(event.requisition_number)}<br>` : ""}
+                ${event.form_id ? `Form ID: ${escapeHtml(event.form_id)}<br>` : ""}
+                ${event.details ? `<pre style="white-space:pre-wrap;background:#f6f8fb;padding:8px;border-radius:5px;overflow:auto;">${escapeHtml(JSON.stringify(event.details, null, 2))}</pre>` : ""}
+            </div>
+        `).join("") || "<p>No audit events found.</p>"}
+
+        <a class="link-button secondary" href="/users">Manage Users</a>
+        <a class="link-button" href="/search">Back</a>
+    `));
 });
 
 app.get("/search", requireLogin, (req, res) => {
     const role = req.session.role;
+    const signedInAs = `${req.session.fullName || req.session.username} - ${role.toUpperCase()}`;
 
     res.send(renderAuthCard("eCOC Options", `
         <h1>eCOC Options</h1>
-        <p>${escapeHtml(role.toUpperCase())} access</p>
+        <p>${escapeHtml(signedInAs)}</p>
 
         <form id="searchForm" method="GET" action="/load">
             <label>Load Existing eCOC</label>
@@ -1325,6 +1565,8 @@ app.get("/search", requireLogin, (req, res) => {
 
         <a class="link-button secondary" href="/sites">Site Folders</a>
         <a class="link-button secondary" href="/view-pdfs">All eCOCs</a>
+        ${role === "owner" ? `<a class="link-button secondary" href="/users">Manage Users</a>` : ""}
+        ${role === "owner" ? `<a class="link-button secondary" href="/audit">Audit Trail</a>` : ""}
         <a class="link-button secondary" href="/logout">Log Out</a>
     `));
 });
@@ -1415,6 +1657,22 @@ app.post("/add", requireRole("site", "driver", "lab"), async (req, res) => {
             }
 
             await lockRoleSection(d.id, role);
+            await auditLog(req, "form_updated", {
+                formId: d.id,
+                requisitionNumber: updated.requisition_number,
+                details: {
+                    section: role,
+                    changes: diffValues(existingForm, updated, [
+                        "protocol_name", "site_name", "shipping_date", "courier_name",
+                        "page_numbers", "shipped_by", "courier_collection_datetime",
+                        "delivery_datetime", "requisition_number", "pid"
+                    ]),
+                    sample_rows_saved: mergedRows.length,
+                    monitors_saved: role === "driver" ? normalizeArray(d.monitor_sn).filter(Boolean).length : undefined,
+                    job_numbers_saved: role === "driver" ? normalizeArray(d.job_number).filter(Boolean).length : undefined,
+                    section_locked_after_save: true
+                }
+            });
             return res.redirect(`/form/${d.id}`);
         }
 
@@ -1436,6 +1694,18 @@ app.post("/add", requireRole("site", "driver", "lab"), async (req, res) => {
 
         const formId = insert.rows[0].id;
         await replaceSamples(formId, d);
+        await auditLog(req, "form_created", {
+            formId,
+            requisitionNumber: d.requisition_number,
+            details: {
+                protocol_name: protocol,
+                site_name: site,
+                shipping_date: d.shipping_date || null,
+                requisition_number: d.requisition_number,
+                pid: d.pid,
+                sample_rows_saved: normalizeArray(d.sample_type).length
+            }
+        });
         res.redirect(`/form/${formId}`);
     } catch (err) {
         res.send("Save error: " + err.message);
@@ -1461,15 +1731,33 @@ app.get("/owner/:id", requireRole("owner"), async (req, res) => {
 });
 
 app.post("/owner/:id/access", requireRole("owner"), async (req, res) => {
+    const beforeResult = await pool.query("SELECT * FROM coc_forms WHERE id=$1", [req.params.id]);
+    const before = beforeResult.rows[0];
+    if (!before) return res.send("Record not found");
+
+    const afterLocks = {
+        site_locked: req.body.allow_site ? false : true,
+        driver_locked: req.body.allow_driver ? false : true,
+        lab_locked: req.body.allow_lab ? false : true
+    };
+
     await pool.query(`
         UPDATE coc_forms SET site_locked=$1, driver_locked=$2, lab_locked=$3, updated_at=CURRENT_TIMESTAMP
         WHERE id=$4
     `, [
-        req.body.allow_site ? false : true,
-        req.body.allow_driver ? false : true,
-        req.body.allow_lab ? false : true,
+        afterLocks.site_locked,
+        afterLocks.driver_locked,
+        afterLocks.lab_locked,
         req.params.id
     ]);
+
+    await auditLog(req, "access_changed", {
+        formId: req.params.id,
+        requisitionNumber: before.requisition_number,
+        details: {
+            changes: diffValues(before, afterLocks, ["site_locked", "driver_locked", "lab_locked"])
+        }
+    });
 
     res.redirect(`/form/${req.params.id}`);
 });
@@ -1511,6 +1799,9 @@ app.get("/sites/:slug/ecocs", requireLogin, async (req, res) => {
 
 app.get("/sites/:slug/qrcodes", requireLogin, async (req, res) => {
     const buffer = await generateSiteQrPdfBuffer(req, req.params.slug);
+    await auditLog(req, "qr_codes_downloaded", {
+        details: { site_slug: req.params.slug }
+    });
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `attachment; filename="qr-codes-${req.params.slug}.pdf"`);
     res.send(buffer);
@@ -1533,7 +1824,12 @@ app.get("/view-pdfs", requireLogin, async (req, res) => {
 
 app.get("/download/:id", requireLogin, async (req, res) => {
     try {
+        const formResult = await pool.query("SELECT requisition_number FROM coc_forms WHERE id=$1", [req.params.id]);
         const buffer = await generatePdfBuffer(req.params.id);
+        await auditLog(req, "pdf_downloaded", {
+            formId: req.params.id,
+            requisitionNumber: formResult.rows[0] ? formResult.rows[0].requisition_number : null
+        });
         res.setHeader("Content-Type", "application/pdf");
         res.setHeader("Content-Disposition", `attachment; filename="eCOC_${req.params.id}.pdf"`);
         res.send(buffer);
