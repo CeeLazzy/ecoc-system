@@ -222,8 +222,179 @@ function diffValues(before, after, fields) {
     return changes;
 }
 
+function sampleRowsForAudit(rows) {
+    return (rows || []).map((row, index) => ({
+        row: index + 1,
+        sample_type: row.sample_type || "",
+        shipping_temp: row.shipping_temp || "",
+        shipping_temp_other: row.shipping_temp_other || "",
+        tubes_sent: row.tubes_sent || "",
+        sample_collection_datetime: formatDateTime(row.sample_collection_datetime),
+        visit: row.visit || "",
+        courier_pickup_temp: row.courier_pickup_temp || "",
+        tubes_received: row.tubes_received || "",
+        receiver_initial_date: row.receiver_initial_date || "",
+        comments: row.comments || "",
+        delivery_temp: row.delivery_temp || ""
+    }));
+}
+
+function rowChangesForAudit(beforeRows, afterRows) {
+    const before = sampleRowsForAudit(beforeRows);
+    const after = sampleRowsForAudit(afterRows);
+    const max = Math.max(before.length, after.length);
+    const changes = [];
+    for (let index = 0; index < max; index++) {
+        const beforeRow = before[index] || {};
+        const afterRow = after[index] || {};
+        const fields = Object.keys({ ...beforeRow, ...afterRow }).filter(field => field !== "row");
+        const rowChanges = diffValues(beforeRow, afterRow, fields);
+        if (Object.keys(rowChanges).length) {
+            changes.push({
+                row: index + 1,
+                status: before[index] ? (after[index] ? "changed" : "removed") : "added",
+                changes: rowChanges
+            });
+        }
+    }
+    return changes;
+}
+
+function auditDetailLines(details) {
+    if (!details) return [];
+    const lines = [];
+
+    if (details.section) lines.push(`Section: ${details.section}`);
+    if (details.saved_by) lines.push(`Saved by: ${userLabel(details.saved_by)}`);
+    for (const field of ["protocol_name", "site_name", "shipping_date", "page_numbers", "shipped_by", "requisition_number", "pid"]) {
+        if (details[field] !== undefined && details[field] !== null && details[field] !== "") {
+            lines.push(`${field}: ${details[field]}`);
+        }
+    }
+    if (details.created_user) lines.push(`User: ${userLabel(details.created_user)}`);
+    if (details.deleted_user) lines.push(`Deleted user: ${userLabel(details.deleted_user)}`);
+
+    if (details.changes && Object.keys(details.changes).length) {
+        lines.push("Field changes:");
+        for (const [field, change] of Object.entries(details.changes)) {
+            lines.push(`- ${field}: "${change.from ?? ""}" to "${change.to ?? ""}"`);
+        }
+    }
+
+    if (details.sample_row_changes && details.sample_row_changes.length) {
+        lines.push("Sample row changes:");
+        for (const row of details.sample_row_changes) {
+            lines.push(`- Row ${row.row} ${row.status}`);
+            for (const [field, change] of Object.entries(row.changes || {})) {
+                lines.push(`  ${field}: "${change.from ?? ""}" to "${change.to ?? ""}"`);
+            }
+        }
+    }
+
+    if (details.sample_rows_added && details.sample_rows_added.length) {
+        lines.push("Sample rows added:");
+        for (const row of details.sample_rows_added) {
+            lines.push(`- Row ${row.row}: ${row.sample_type || "sample"}; tubes sent ${row.tubes_sent || ""}; visit ${row.visit || ""}`);
+        }
+    }
+
+    if (details.sample_rows_after_save && details.sample_rows_after_save.length && !(details.sample_row_changes && details.sample_row_changes.length)) {
+        lines.push("Sample rows saved:");
+        for (const row of details.sample_rows_after_save) {
+            lines.push(`- Row ${row.row}: ${row.sample_type || "sample"}; tubes sent ${row.tubes_sent || ""}; received ${row.tubes_received || ""}; visit ${row.visit || ""}`);
+        }
+    }
+
+    if (details.monitors_saved !== undefined) lines.push(`Monitors saved: ${details.monitors_saved}`);
+    if (details.monitor_serial_numbers && details.monitor_serial_numbers.length) lines.push(`Monitor serial numbers: ${details.monitor_serial_numbers.join(", ")}`);
+    if (details.job_numbers_saved !== undefined) lines.push(`Job numbers saved: ${details.job_numbers_saved}`);
+    if (details.job_numbers && details.job_numbers.length) lines.push(`Job numbers: ${details.job_numbers.join(", ")}`);
+    if (details.section_locked_after_save) lines.push("Section locked after save: yes");
+    if (details.site_slug) lines.push(`Site folder: ${details.site_slug}`);
+    if (!lines.length) lines.push(JSON.stringify(details));
+
+    return lines;
+}
+
+function auditActor(event) {
+    const name = event.full_name || event.username || "Unknown user";
+    const username = event.username ? ` (${event.username})` : "";
+    const role = event.role ? ` - ${event.role}` : "";
+    return `${name}${username}${role}`;
+}
+
+function buildAuditQuery(query, limit = 200) {
+    const username = String(query.username || "").trim();
+    const requisition = String(query.req || "").trim();
+    const action = String(query.action || "").trim();
+    const clauses = [];
+    const values = [];
+
+    if (username) {
+        values.push(`%${username}%`);
+        clauses.push(`username ILIKE $${values.length}`);
+    }
+    if (requisition) {
+        values.push(`%${requisition}%`);
+        clauses.push(`requisition_number ILIKE $${values.length}`);
+    }
+    if (action) {
+        values.push(action);
+        clauses.push(`action=$${values.length}`);
+    }
+
+    return {
+        username,
+        requisition,
+        action,
+        sql: `
+            SELECT * FROM audit_events
+            ${clauses.length ? `WHERE ${clauses.join(" AND ")}` : ""}
+            ORDER BY created_at DESC
+            LIMIT ${Number(limit)}
+        `,
+        values
+    };
+}
+
+async function generateAuditPdfBuffer(events, filters) {
+    return new Promise((resolve, reject) => {
+        const doc = new PDFDocument({ size: "A4", margin: 40 });
+        const chunks = [];
+        doc.on("data", chunk => chunks.push(chunk));
+        doc.on("end", () => resolve(Buffer.concat(chunks)));
+        doc.on("error", reject);
+
+        function line(text, options = {}) {
+            if (doc.y > 760) doc.addPage();
+            doc.font(options.bold ? "Helvetica-Bold" : "Helvetica")
+                .fontSize(options.size || 9)
+                .fillColor(options.color || "#202833")
+                .text(String(text), { width: 515 });
+        }
+
+        doc.font("Helvetica-Bold").fontSize(18).fillColor("#1f3a5f").text("eCOC Audit Trail", { align: "center" });
+        doc.moveDown(0.5);
+        line(`Generated: ${formatDateTime(new Date())}`, { size: 9 });
+        line(`Filters: username=${filters.username || "all"}, requisition=${filters.requisition || "all"}, action=${filters.action || "all"}`, { size: 9 });
+        doc.moveDown();
+
+        for (const event of events) {
+            line(`${formatDateTime(event.created_at)} - ${event.action}`, { bold: true, size: 10, color: "#1f3a5f" });
+            line(`User: ${auditActor(event)}`);
+            if (event.requisition_number) line(`Requisition: ${event.requisition_number}`);
+            if (event.form_id) line(`Form ID: ${event.form_id}`);
+            for (const detailLine of auditDetailLines(event.details)) line(detailLine);
+            doc.moveDown(0.7);
+        }
+
+        if (!events.length) line("No audit events found.");
+        doc.end();
+    });
+}
+
 function userLabel(user) {
-    return `${user.full_name} (${user.username}, ${user.role})`;
+    return `${user.full_name || user.fullName || ""} (${user.username || ""}, ${user.role || ""})`;
 }
 
 function requireLogin(req, res, next) {
@@ -1328,63 +1499,64 @@ app.post("/users/:id/delete", requireRole("owner"), async (req, res) => {
 });
 
 app.get("/audit", requireRole("owner"), async (req, res) => {
-    const username = String(req.query.username || "").trim();
-    const requisition = String(req.query.req || "").trim();
-    const action = String(req.query.action || "").trim();
-
-    const clauses = [];
-    const values = [];
-    if (username) {
-        values.push(`%${username}%`);
-        clauses.push(`username ILIKE $${values.length}`);
-    }
-    if (requisition) {
-        values.push(`%${requisition}%`);
-        clauses.push(`requisition_number ILIKE $${values.length}`);
-    }
-    if (action) {
-        values.push(action);
-        clauses.push(`action=$${values.length}`);
-    }
-
-    const result = await pool.query(`
-        SELECT * FROM audit_events
-        ${clauses.length ? `WHERE ${clauses.join(" AND ")}` : ""}
-        ORDER BY created_at DESC
-        LIMIT 200
-    `, values);
+    const filters = buildAuditQuery(req.query, 200);
+    const result = await pool.query(filters.sql, filters.values);
 
     const actions = await pool.query("SELECT DISTINCT action FROM audit_events ORDER BY action");
+    const pdfQuery = new URLSearchParams();
+    if (filters.username) pdfQuery.set("username", filters.username);
+    if (filters.requisition) pdfQuery.set("req", filters.requisition);
+    if (filters.action) pdfQuery.set("action", filters.action);
 
     res.send(renderAuthCard("Audit Trail", `
         <h1>Audit Trail</h1>
         <p>Latest 200 events</p>
         <form method="GET" action="/audit">
             <label>Username</label>
-            <input name="username" value="${escapeHtml(username)}">
+            <input name="username" value="${escapeHtml(filters.username)}">
             <label>Requisition Number</label>
-            <input name="req" value="${escapeHtml(requisition)}">
+            <input name="req" value="${escapeHtml(filters.requisition)}">
             <label>Action</label>
             <select name="action">
                 <option value="">All actions</option>
-                ${actions.rows.map(row => `<option value="${escapeHtml(row.action)}" ${selected(action, row.action)}>${escapeHtml(row.action)}</option>`).join("")}
+                ${actions.rows.map(row => `<option value="${escapeHtml(row.action)}" ${selected(filters.action, row.action)}>${escapeHtml(row.action)}</option>`).join("")}
             </select>
             <button type="submit">Filter</button>
         </form>
+        <a class="link-button secondary" href="/audit/download?${escapeHtml(pdfQuery.toString())}">Download Audit PDF</a>
         <hr>
         ${result.rows.map(event => `
             <div style="text-align:left;border-bottom:1px solid #e1e7ef;padding:10px 0;font-size:12px;">
-                <strong>${escapeHtml(formatDateTime(event.created_at))}</strong><br>
-                ${escapeHtml(event.action)} by ${escapeHtml(event.full_name || event.username || "Unknown")} ${event.role ? `(${escapeHtml(event.role)})` : ""}<br>
+                <strong>${escapeHtml(formatDateTime(event.created_at))} - ${escapeHtml(event.action)}</strong><br>
+                User: ${escapeHtml(auditActor(event))}<br>
                 ${event.requisition_number ? `Req: ${escapeHtml(event.requisition_number)}<br>` : ""}
                 ${event.form_id ? `Form ID: ${escapeHtml(event.form_id)}<br>` : ""}
-                ${event.details ? `<pre style="white-space:pre-wrap;background:#f6f8fb;padding:8px;border-radius:5px;overflow:auto;">${escapeHtml(JSON.stringify(event.details, null, 2))}</pre>` : ""}
+                ${event.details ? `<div style="white-space:pre-wrap;background:#f6f8fb;padding:8px;border-radius:5px;overflow:auto;">${escapeHtml(auditDetailLines(event.details).join("\n"))}</div>` : ""}
             </div>
         `).join("") || "<p>No audit events found.</p>"}
 
         <a class="link-button secondary" href="/users">Manage Users</a>
         <a class="link-button" href="/search">Back</a>
     `));
+});
+
+app.get("/audit/download", requireRole("owner"), async (req, res) => {
+    const filters = buildAuditQuery(req.query, 500);
+    const result = await pool.query(filters.sql, filters.values);
+    const buffer = await generateAuditPdfBuffer(result.rows, filters);
+    await auditLog(req, "audit_pdf_downloaded", {
+        details: {
+            filters: {
+                username: filters.username || null,
+                requisition: filters.requisition || null,
+                action: filters.action || null
+            },
+            exported_events: result.rows.length
+        }
+    });
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", "attachment; filename=\"audit-trail.pdf\"");
+    res.send(buffer);
 });
 
 app.get("/search", requireLogin, (req, res) => {
@@ -1706,14 +1878,24 @@ app.post("/add", requireRole("site", "driver", "lab"), async (req, res) => {
                 requisitionNumber: updated.requisition_number,
                 details: {
                     section: role,
+                    saved_by: {
+                        user_id: req.session.userId,
+                        username: req.session.username,
+                        full_name: req.session.fullName,
+                        role: req.session.role
+                    },
                     changes: diffValues(existingForm, updated, [
                         "protocol_name", "site_name", "shipping_date", "courier_name",
                         "page_numbers", "shipped_by", "courier_collection_datetime",
                         "delivery_datetime", "requisition_number", "pid"
                     ]),
+                    sample_row_changes: rowChangesForAudit(existingRows, mergedRows),
                     sample_rows_saved: mergedRows.length,
+                    sample_rows_after_save: sampleRowsForAudit(mergedRows),
                     monitors_saved: role === "driver" ? normalizeArray(d.monitor_sn).filter(Boolean).length : undefined,
+                    monitor_serial_numbers: role === "driver" ? normalizeArray(d.monitor_sn).filter(Boolean) : undefined,
                     job_numbers_saved: role === "driver" ? normalizeArray(d.job_number).filter(Boolean).length : undefined,
+                    job_numbers: role === "driver" ? normalizeArray(d.job_number).filter(Boolean) : undefined,
                     section_locked_after_save: true
                 }
             });
@@ -1742,12 +1924,21 @@ app.post("/add", requireRole("site", "driver", "lab"), async (req, res) => {
             formId,
             requisitionNumber: d.requisition_number,
             details: {
+                saved_by: {
+                    user_id: req.session.userId,
+                    username: req.session.username,
+                    full_name: req.session.fullName,
+                    role: req.session.role
+                },
                 protocol_name: protocol,
                 site_name: site,
                 shipping_date: d.shipping_date || null,
+                page_numbers: d.page_numbers || null,
+                shipped_by: d.shipped_by || null,
                 requisition_number: d.requisition_number,
                 pid: d.pid,
-                sample_rows_saved: normalizeArray(d.sample_type).length
+                sample_rows_saved: normalizeArray(d.sample_type).length,
+                sample_rows_added: sampleRowsForAudit(mergeRowsForRole("site", d, []))
             }
         });
         res.redirect(`/form/${formId}`);
