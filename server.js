@@ -1304,8 +1304,26 @@ function renderAuthCard(title, bodyHtml) {
 <head>
 <title>${escapeHtml(title)}</title>
 <style>
-body{font-family:Arial,sans-serif;margin:0;min-height:100vh;background:linear-gradient(135deg,#eef4f8,#d9e4ec);display:flex;align-items:center;justify-content:center;color:#1f2933;}
-.card{width:390px;max-width:calc(100vw - 32px);background:white;padding:34px;border-radius:10px;box-shadow:0 12px 30px rgba(31,58,95,.18);text-align:center;}
+body{
+    font-family:Arial,sans-serif;
+    margin:0;
+    background:linear-gradient(135deg,#eef4f8,#d9e4ec);
+    color:#1f2933;
+
+    min-height:100vh;
+
+    display:flex;
+    justify-content:center;
+    align-items:flex-start;
+
+    padding:30px;
+    overflow-y:auto;
+}
+.card{
+    width:min(1100px,95vw);
+    max-width:95vw;
+    max-height:95vh;
+    overflow:auto;background:white;padding:34px;border-radius:10px;box-shadow:0 12px 30px rgba(31,58,95,.18);text-align:center;}
 .logo{width:150px;margin-bottom:12px;}
 h1{font-size:22px;margin:8px 0 4px;color:#1f3a5f;}
 p{margin:0 0 24px;font-size:13px;color:#5b6775;}
