@@ -32,7 +32,7 @@ const pool = new Pool({
 const roles = ["site", "driver", "lab", "owner"];
 
 const defaultUsers = [
-    { username: "owner", password: process.env.DEFAULT_OWNER_PASSWORD || "Owner@123", role: "owner", fullName: "Owner Admin" }
+    { username: "owner", password: "Owner@123" || "owner123", role: "owner", fullName: "Owner Admin" }
 ];
 
 const protocolOptions = ["TBD15-201", "Brilliant B011", "Align", "Transgender", "Other"];
